@@ -3,4 +3,9 @@ project(csapp C)
 
 set(CMAKE_C_STANDARD 11)
 
-add_executable(csapp main.c)
+#include_directories("ass/*.h")
+
+file(GLOB files "${CMAKE_CURRENT_SOURCE_DIR}/*.c")
+foreach (file ${files})
+    add_executable(csapp ${file})
+endforeach ()
