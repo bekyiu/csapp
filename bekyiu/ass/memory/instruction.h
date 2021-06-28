@@ -7,9 +7,11 @@
 
 #include <stdint.h>
 
+#define NUM_OPT
+
 // operator
 typedef enum Opt {
-    MOV,    // 0
+    MOV_REG_REG,    // 0
     PUSH,   // 1
     CALL,   // 2
 } Opt;
@@ -58,6 +60,16 @@ typedef struct Inst {
     char asmCode[100];
 } Inst;
 
+// 处理指令的函数指针
+typedef void(*InstHandler)(uint64_t, uint64_t);
+InstHandler handlerTable[NUM_OPT];
+
+
 // 一个指令周期
 void instCycle();
+// 初始化
+void initHandlerTable();
+// 指令操作
+void addRegReg(uint64_t src, uint64_t dst);
+
 #endif //CSAPP_INSTRUCTION_H

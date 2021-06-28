@@ -3,9 +3,9 @@ project(csapp C)
 
 set(CMAKE_C_STANDARD 11)
 
-#include_directories("ass/*.h")
 
-file(GLOB files "${CMAKE_CURRENT_SOURCE_DIR}/*.c")
+file(GLOB_RECURSE files "${CMAKE_CURRENT_SOURCE_DIR}/bekyiu/*.c")
 foreach (file ${files})
-    add_executable(csapp ${file})
+    message(${file})
 endforeach ()
+add_executable(csapp ${files})

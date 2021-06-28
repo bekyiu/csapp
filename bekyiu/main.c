@@ -5,7 +5,7 @@
 
 int main() {
     Reg r;
-    r.rax = 0x1234abcd5678fffe;
+    r.rax = 0x1234abcd5678ffee;
     printf("%x", r.eax);
     return 0;
 }

@@ -3,6 +3,8 @@
 //
 
 
+#include <stdint.h>
+
 // 获取二进制最低位的1的2的幂
 // 例: 0b1010 -> 0b10
 uint32_t LowBit(uint32_t x) {
