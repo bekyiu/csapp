@@ -10,4 +10,9 @@
 // 物理内存
 uint8_t mem[MEM_LEN];
 
+void write64Dram(uint64_t pAddr, uint64_t val);
+uint64_t read64Dram(uint64_t pAddr);
+
+void logRes();
+void logStack();
 #endif //CSAPP_DRAM_H

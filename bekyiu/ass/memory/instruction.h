@@ -11,13 +11,19 @@
 
 // operator
 typedef enum Opt {
-    MOV_REG_REG,    // 0
-    PUSH,   // 1
-    CALL,   // 2
+    MOV_REG_REG,
+    MOV_REG_MEM,
+    MOV_MEM_REG,
+    PUSH_REG,
+    POP_REG,
+    CALL,
+    RET,
+    ADD_REG_REG,
 } Opt;
 
 // operand type
 typedef enum OpdType {
+    EMPTY,
     // imm
     IMM,
     // R[ra]
@@ -62,14 +68,18 @@ typedef struct Inst {
 
 // 处理指令的函数指针
 typedef void(*InstHandler)(uint64_t, uint64_t);
+
 InstHandler handlerTable[NUM_OPT];
 
 
 // 一个指令周期
 void instCycle();
+
 // 初始化
 void initHandlerTable();
-// 指令操作
-void addRegReg(uint64_t src, uint64_t dst);
 
+// 指令操作, 同时修改rip
+void addRegReg(uint64_t src, uint64_t dst);
+void movRegReg(uint64_t src, uint64_t dst);
+void call(uint64_t src, uint64_t dst);
 #endif //CSAPP_INSTRUCTION_H

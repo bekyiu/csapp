@@ -7,7 +7,7 @@
 
 #include "../memory/instruction.h"
 
-#define INST_LEN 100
+#define INST_LEN 15
 
 Inst program[INST_LEN];
 

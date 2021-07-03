@@ -5,11 +5,13 @@
 #include "instruction.h"
 #include "../cpu/mmu.h"
 #include "../cpu/register.h"
+#include "stdio.h"
+#include "dram.h"
 
 // 返回真实的操作数
 static uint64_t decodeOpd(Opd opd) {
     if (opd.type == IMM) {
-        return opd.imm;
+        return *((uint64_t *) &opd.imm);
     }
     if (opd.type == REG) {
         return (uint64_t) opd.reg1;
@@ -53,13 +55,30 @@ void instCycle() {
     InstHandler handler = handlerTable[inst->opt];
     handler(src, dst);
 
-    reg.rip += sizeof(Inst);
+    printf("[%s]\n", inst->asmCode);
+
 }
 
 void initHandlerTable() {
-    handlerTable[MOV_REG_REG] = addRegReg;
+    handlerTable[ADD_REG_REG] = addRegReg;
+    handlerTable[MOV_REG_REG] = movRegReg;
+    handlerTable[CALL] = call;
 }
 
 void addRegReg(uint64_t src, uint64_t dst) {
     *((uint64_t *) dst) = *((uint64_t *) dst) + *((uint64_t *) src);
+    reg.rip += sizeof(Inst);
+}
+
+void movRegReg(uint64_t src, uint64_t dst) {
+    *((uint64_t *) dst) = *((uint64_t *) src);
+    reg.rip += sizeof(Inst);
+}
+
+void call(uint64_t src, uint64_t dst) {
+    // 写入返回地址到栈顶
+    reg.rsp -= 8;
+    write64Dram(va2pa(reg.rsp), reg.rip + sizeof(Inst));
+    // 跳转到目标位置执行
+    reg.rip = src;
 }
