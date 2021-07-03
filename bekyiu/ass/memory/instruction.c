@@ -40,7 +40,7 @@ static uint64_t decodeOpd(Opd opd) {
         vAddr = opd.imm + *(opd.reg1) + *(opd.reg2) * opd.scale;
     }
 
-    return va2pa(vAddr);
+    return vAddr;
 }
 
 void instCycle() {
@@ -63,6 +63,8 @@ void initHandlerTable() {
     handlerTable[ADD_REG_REG] = addRegReg;
     handlerTable[MOV_REG_REG] = movRegReg;
     handlerTable[CALL] = call;
+    handlerTable[PUSH_REG] = pushReg;
+    handlerTable[MOV_REG_MEM] = movRegMem;
 }
 
 void addRegReg(uint64_t src, uint64_t dst) {
@@ -81,4 +83,15 @@ void call(uint64_t src, uint64_t dst) {
     write64Dram(va2pa(reg.rsp), reg.rip + sizeof(Inst));
     // 跳转到目标位置执行
     reg.rip = src;
+}
+
+void pushReg(uint64_t src, uint64_t dst) {
+    reg.rsp -= 8;
+    write64Dram(va2pa(reg.rsp), *(uint64_t *) src);
+    reg.rip += sizeof(Inst);
+}
+
+void movRegMem(uint64_t src, uint64_t dst) {
+    write64Dram(va2pa(dst), *(uint64_t *) src);
+    reg.rip += sizeof(Inst);
 }

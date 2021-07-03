@@ -29,7 +29,7 @@ int main() {
 
 
     // run
-    for (int i = 0; i < 3; ++i) {
+    for (int i = 0; i < 7; ++i) {
         logRes();
         logStack();
         instCycle();

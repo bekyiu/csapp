@@ -82,4 +82,6 @@ void initHandlerTable();
 void addRegReg(uint64_t src, uint64_t dst);
 void movRegReg(uint64_t src, uint64_t dst);
 void call(uint64_t src, uint64_t dst);
+void pushReg(uint64_t src, uint64_t dst);
+void movRegMem(uint64_t src, uint64_t dst);
 #endif //CSAPP_INSTRUCTION_H
