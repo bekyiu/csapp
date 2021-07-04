@@ -84,4 +84,7 @@ void movRegReg(uint64_t src, uint64_t dst);
 void call(uint64_t src, uint64_t dst);
 void pushReg(uint64_t src, uint64_t dst);
 void movRegMem(uint64_t src, uint64_t dst);
+void movMemReg(uint64_t src, uint64_t dst);
+void popReg(uint64_t src, uint64_t dst);
+void ret(uint64_t src, uint64_t dst);
 #endif //CSAPP_INSTRUCTION_H

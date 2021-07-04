@@ -65,6 +65,9 @@ void initHandlerTable() {
     handlerTable[CALL] = call;
     handlerTable[PUSH_REG] = pushReg;
     handlerTable[MOV_REG_MEM] = movRegMem;
+    handlerTable[MOV_MEM_REG] = movMemReg;
+    handlerTable[POP_REG] = popReg;
+    handlerTable[RET] = ret;
 }
 
 void addRegReg(uint64_t src, uint64_t dst) {
@@ -95,3 +98,25 @@ void movRegMem(uint64_t src, uint64_t dst) {
     write64Dram(va2pa(dst), *(uint64_t *) src);
     reg.rip += sizeof(Inst);
 }
+
+void movMemReg(uint64_t src, uint64_t dst) {
+    *(uint64_t *) dst = read64Dram(va2pa(src));
+    reg.rip += sizeof(Inst);
+}
+
+void ret(uint64_t src, uint64_t dst) {
+    // 从栈顶取出返回地址
+    uint64_t retAddr = read64Dram(va2pa(reg.rsp));
+    reg.rsp += 8;
+
+    reg.rip = retAddr;
+}
+
+void popReg(uint64_t src, uint64_t dst) {
+    *(uint64_t *) src = read64Dram(va2pa(reg.rsp));
+    reg.rsp += 8;
+    reg.rip += sizeof(Inst);
+}
+
+
+
