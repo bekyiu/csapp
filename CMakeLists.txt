@@ -5,6 +5,7 @@ set(CMAKE_C_STANDARD 11)
 
 
 file(GLOB_RECURSE files "${CMAKE_CURRENT_SOURCE_DIR}/bekyiu/*.c")
+
 foreach (file ${files})
     message(${file})
 endforeach ()
