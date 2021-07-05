@@ -271,14 +271,14 @@ static void movHandler(Opd *srcOpd, Opd *dstOpd, Core *cr) {
 
 static void pushHandler(Opd *srcOpd, Opd *dstOpd, Core *cr) {
     uint64_t src = decodeOpd(srcOpd);
-    Reg *reg = &(cr->reg);
+    Regs *regs = &(cr->regs);
 
     if (srcOpd->type == REG) {
         // src: register
         // dst: empty
-        reg->rsp = reg->rsp - 8;
+        regs->rsp = regs->rsp - 8;
         write64Dram(
-                va2pa(reg->rsp, cr),
+                va2pa(regs->rsp, cr),
                 *(uint64_t *) src,
                 cr
         );
@@ -290,15 +290,15 @@ static void pushHandler(Opd *srcOpd, Opd *dstOpd, Core *cr) {
 
 static void popHandler(Opd *srcOpd, Opd *dstOpd, Core *cr) {
     uint64_t src = decodeOpd(srcOpd);
-    Reg *reg = &(cr->reg);
+    Regs *regs = &(cr->regs);
     if (srcOpd->type == REG) {
         // src: register
         // dst: empty
         uint64_t val = read64Dram(
-                va2pa(reg->rsp, cr),
+                va2pa(regs->rsp, cr),
                 cr
         );
-        reg->rsp = reg->rsp + 8;
+        regs->rsp = regs->rsp + 8;
         *(uint64_t *) src = val;
         nextRip(cr);
         resetCFlags(cr);
@@ -311,14 +311,14 @@ static void leaveHandler(Opd *srcOpd, Opd *dstOpd, Core *cr) {
 
 static void callHandler(Opd *srcOpd, Opd *dstOpd, Core *cr) {
     uint64_t src = decodeOpd(srcOpd);
-    Reg *reg = &(cr->reg);
+    Regs *regs = &(cr->regs);
 
     // src: immediate number: virtual address of target function starting
     // dst: empty
     // push the return address
-    reg->rsp = reg->rsp - 8;
+    regs->rsp = regs->rsp - 8;
     write64Dram(
-            va2pa(reg->rsp, cr),
+            va2pa(regs->rsp, cr),
             cr->rip + sizeof(char) * MAX_INSTRUCTION_CHAR,
             cr
     );
@@ -328,16 +328,16 @@ static void callHandler(Opd *srcOpd, Opd *dstOpd, Core *cr) {
 }
 
 static void retHandler(Opd *srcOpd, Opd *dstOpd, Core *cr) {
-    Reg *reg = &(cr->reg);
+    Regs *regs = &(cr->regs);
 
     // src: empty
     // dst: empty
     // pop rsp
     uint64_t retAddr = read64Dram(
-            va2pa(reg->rsp, cr),
+            va2pa(regs->rsp, cr),
             cr
     );
-    reg->rsp = reg->rsp + 8;
+    regs->rsp = regs->rsp + 8;
     // jump to return address
     cr->rip = retAddr;
     resetCFlags(cr);
@@ -398,12 +398,12 @@ void logReg(Core *cr) {
         return;
     }
 
-    Reg reg = cr->reg;
+    Regs regs = cr->regs;
 
     printf("rax = %16llx\trbx = %16llx\trcx = %16llx\trdx = %16llx\n",
-           reg.rax, reg.rbx, reg.rcx, reg.rdx);
+           regs.rax, regs.rbx, regs.rcx, regs.rdx);
     printf("rsi = %16llx\trdi = %16llx\trbp = %16llx\trsp = %16llx\n",
-           reg.rsi, reg.rdi, reg.rbp, reg.rsp);
+           regs.rsi, regs.rdi, regs.rbp, regs.rsp);
     printf("rip = %16llx\n", cr->rip);
     printf("CF = %u\tZF = %u\tSF = %u\tOF = %u\n",
            cr->cf, cr->zf, cr->sf, cr->of);
@@ -413,15 +413,15 @@ void logStack(Core *cr) {
     if ((DEBUG_VERBOSE_SET & DEBUG_PRINT_STACK) == 0x0) {
         return;
     }
-    Reg reg = cr->reg;
+    Regs regs = cr->regs;
 
     int n = 10;
     // physical address of the top of stack
-    uint64_t *low = (uint64_t *) &pm[va2pa(reg.rsp, cr)];
+    uint64_t *low = (uint64_t *) &pm[va2pa(regs.rsp, cr)];
     // bias to high address
     uint64_t *high = &low[n];
 
-    uint64_t va = reg.rsp + n * 8;
+    uint64_t va = regs.rsp + n * 8;
 
     for (int i = 0; i < 2 * n; ++i) {
         uint64_t *ptr = (uint64_t *) (high - i);

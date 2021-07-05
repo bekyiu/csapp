@@ -10,7 +10,7 @@
 
 // struct of registers in each core
 // resource accessible to the core itself only
-typedef struct Reg {
+typedef struct Regs {
     // return value
     union {
         uint64_t rax;
@@ -153,7 +153,7 @@ typedef struct Reg {
         uint16_t r15w;
         uint8_t r15b;
     };
-} Reg;
+} Regs;
 
 /*======================================*/
 /*      cpu core                        */
@@ -203,7 +203,7 @@ typedef struct Core {
     uint32_t of;
 
     // register files
-    Reg reg;
+    Regs regs;
 } Core;
 
 // define cpu core array to support core level parallelism

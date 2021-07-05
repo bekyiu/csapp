@@ -49,7 +49,7 @@ void testAddFunctionCallAndComputation() {
     ACTIVE_CORE = 0x0;
 
     Core *ac = (Core *) &cores[ACTIVE_CORE];
-    Reg *reg = &(ac->reg);
+    Regs *reg = &(ac->regs);
 
     // init
     reg->rax = 0x12340000;
