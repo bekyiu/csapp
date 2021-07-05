@@ -1,11 +1,15 @@
 #include <stdio.h>
 #include <stdbool.h>
 #include <stdint.h>
+#include <limits.h>
 #include "ass/header/cpu.h"
 #include "ass/header/common.h"
 #include "ass/header/memory.h"
 
+
 static void testAddFunctionCallAndComputation();
+
+static void testStr2Uint();
 
 // symbols from isa and sram
 void logReg(Core *cr);
@@ -13,8 +17,31 @@ void logReg(Core *cr);
 void logStack(Core *cr);
 
 int main() {
-    testAddFunctionCallAndComputation();
+//    testAddFunctionCallAndComputation();
+    testStr2Uint();
     return 0;
+}
+
+void testStr2Uint() {
+    char *nums[] = {
+            "0",
+            "-0",
+            "0x0",
+            "1234",
+            "0x1234",
+            "0xabcd",
+            "-0xabcd",
+            "-1234",
+            "2147483647",
+            "-2147483648",
+            "0x8000000000000000",
+            "0xffffffffffffffff",
+            "0x1ffffffffffffffff", // bug, no hint error, but has been overflow
+    };
+
+    for (int i = 0; i < 13; ++i) {
+        printf("%s => %llx\n", nums[i], str2uint(nums[i]));
+    }
 }
 
 void testAddFunctionCallAndComputation() {

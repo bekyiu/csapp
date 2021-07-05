@@ -124,7 +124,31 @@ static void parseInst(const char *str, Inst *inst, Core *cr) {
 
 }
 
+// parse an operand string to an Opd object
 static void parseOpd(const char *str, Opd *opd, Core *cr) {
+    // str: eg %rax, $123 ...
+    opd->type = EMPTY;
+    opd->reg1 = 0;
+    opd->reg2 = 0;
+    opd->imm = 0;
+    opd->scale = 0;
+
+    size_t len = strlen(str);
+    if (len == 0) {
+        return;
+    }
+    // immediate number
+    if (str[0] == '$') {
+        opd->type = IMM;
+        // skip '$'
+        opd->imm = str2uintRange(str, 1, -1);
+        return;
+    }
+    // register
+    if (str[0] == '%') {
+
+    }
+    // memory
 
 }
 
@@ -354,15 +378,15 @@ static void jmpHandler(Opd *srcOpd, Opd *dstOpd, Core *cr) {
 // instruction cycle is implemented in CPU
 // the only exposed interface outside CPU
 void instCycle(Core *cr) {
-    // FETCH: get the instruction string by program counter
+    // fetch: get the instruction string by program counter
     const char *instStr = (const char *) cr->rip;
     slog(DEBUG_INSTRUCTION_CYCLE, "%lx    %s\n", cr->rip, instStr);
 
-    // DECODE: decode the run-time instruction operands
+    // decode: decode the run-time instruction operands
     Inst inst;
     parseInst(instStr, &inst, cr);
 
-    // EXECUTE: get the function pointer or handler by the operator
+    // execute: get the function pointer or handler by the operator
     InstHandler handler = handlerTable[inst.opt];
     // update CPU and memory according the instruction
     handler(&(inst.src), &(inst.dst), cr);
