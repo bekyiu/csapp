@@ -120,6 +120,66 @@ static uint64_t decodeOpd(Opd *opd) {
     return vAddr;
 }
 
+// lookup table
+static const char *regNames[72] = {
+        "%rax", "%eax", "%ax", "%ah", "%al",
+        "%rbx", "%ebx", "%bx", "%bh", "%bl",
+        "%rcx", "%ecx", "%cx", "%ch", "%cl",
+        "%rdx", "%edx", "%dx", "%dh", "%dl",
+        "%rsi", "%esi", "%si", "%sih", "%sil",
+        "%rdi", "%edi", "%di", "%dih", "%dil",
+        "%rbp", "%ebp", "%bp", "%bph", "%bpl",
+        "%rsp", "%esp", "%sp", "%sph", "%spl",
+        "%r8", "%r8d", "%r8w", "%r8b",
+        "%r9", "%r9d", "%r9w", "%r9b",
+        "%r10", "%r10d", "%r10w", "%r10b",
+        "%r11", "%r11d", "%r11w", "%r11b",
+        "%r12", "%r12d", "%r12w", "%r12b",
+        "%r13", "%r13d", "%r13w", "%r13b",
+        "%r14", "%r14d", "%r14w", "%r14b",
+        "%r15", "%r15d", "%r15w", "%r15b",
+};
+
+// give a reg name, return it's addr
+static uint64_t regAddr(const char *str, Core *cr) {
+    // lookup table
+    Regs *regs = &(cr->regs);
+    uint64_t regAddrs[72] = {
+            (uint64_t) &(regs->rax), (uint64_t) &(regs->eax), (uint64_t) &(regs->ax), (uint64_t) &(regs->ah),
+            (uint64_t) &(regs->al),
+            (uint64_t) &(regs->rbx), (uint64_t) &(regs->ebx), (uint64_t) &(regs->bx), (uint64_t) &(regs->bh),
+            (uint64_t) &(regs->bl),
+            (uint64_t) &(regs->rcx), (uint64_t) &(regs->ecx), (uint64_t) &(regs->cx), (uint64_t) &(regs->ch),
+            (uint64_t) &(regs->cl),
+            (uint64_t) &(regs->rdx), (uint64_t) &(regs->edx), (uint64_t) &(regs->dx), (uint64_t) &(regs->dh),
+            (uint64_t) &(regs->dl),
+            (uint64_t) &(regs->rsi), (uint64_t) &(regs->esi), (uint64_t) &(regs->si), (uint64_t) &(regs->sih),
+            (uint64_t) &(regs->sil),
+            (uint64_t) &(regs->rdi), (uint64_t) &(regs->edi), (uint64_t) &(regs->di), (uint64_t) &(regs->dih),
+            (uint64_t) &(regs->dil),
+            (uint64_t) &(regs->rbp), (uint64_t) &(regs->ebp), (uint64_t) &(regs->bp), (uint64_t) &(regs->bph),
+            (uint64_t) &(regs->bpl),
+            (uint64_t) &(regs->rsp), (uint64_t) &(regs->esp), (uint64_t) &(regs->sp), (uint64_t) &(regs->sph),
+            (uint64_t) &(regs->spl),
+            (uint64_t) &(regs->r8), (uint64_t) &(regs->r8d), (uint64_t) &(regs->r8w), (uint64_t) &(regs->r8b),
+            (uint64_t) &(regs->r9), (uint64_t) &(regs->r9d), (uint64_t) &(regs->r9w), (uint64_t) &(regs->r9b),
+            (uint64_t) &(regs->r10), (uint64_t) &(regs->r10d), (uint64_t) &(regs->r10w), (uint64_t) &(regs->r10b),
+            (uint64_t) &(regs->r11), (uint64_t) &(regs->r11d), (uint64_t) &(regs->r11w), (uint64_t) &(regs->r11b),
+            (uint64_t) &(regs->r12), (uint64_t) &(regs->r12d), (uint64_t) &(regs->r12w), (uint64_t) &(regs->r12b),
+            (uint64_t) &(regs->r13), (uint64_t) &(regs->r13d), (uint64_t) &(regs->r13w), (uint64_t) &(regs->r13b),
+            (uint64_t) &(regs->r14), (uint64_t) &(regs->r14d), (uint64_t) &(regs->r14w), (uint64_t) &(regs->r14b),
+            (uint64_t) &(regs->r15), (uint64_t) &(regs->r15d), (uint64_t) &(regs->r15w), (uint64_t) &(regs->r15b),
+    };
+    for (int i = 0; i < 72; ++i) {
+        if (strcmp(str, regNames[i]) == 0) {
+            // now we know that i is the index inside regNames
+            return regAddrs[i];
+        }
+    }
+    printf("parse register %s error\n", str);
+    exit(0);
+}
+
 static void parseInst(const char *str, Inst *inst, Core *cr) {
 
 }
@@ -146,7 +206,9 @@ static void parseOpd(const char *str, Opd *opd, Core *cr) {
     }
     // register
     if (str[0] == '%') {
-
+        opd->type = REG;
+        opd->reg1 = regAddr(str, cr);
+        return;
     }
     // memory
 
@@ -208,10 +270,7 @@ static InstHandler handlerTable[NUM_INSTRUCTION_TYPE] = {
 // reset the condition flags
 // inline to reduce cost
 static inline void resetCFlags(Core *cr) {
-    cr->cf = 0;
-    cr->zf = 0;
-    cr->sf = 0;
-    cr->of = 0;
+    cr->flags._value = 0;
 }
 
 // update the rip pointer to the next instruction sequentially
@@ -399,14 +458,14 @@ void logReg(Core *cr) {
     }
 
     Regs regs = cr->regs;
-
+    Flags flags = cr->flags;
     printf("rax = %16llx\trbx = %16llx\trcx = %16llx\trdx = %16llx\n",
            regs.rax, regs.rbx, regs.rcx, regs.rdx);
     printf("rsi = %16llx\trdi = %16llx\trbp = %16llx\trsp = %16llx\n",
            regs.rsi, regs.rdi, regs.rbp, regs.rsp);
     printf("rip = %16llx\n", cr->rip);
     printf("CF = %u\tZF = %u\tSF = %u\tOF = %u\n",
-           cr->cf, cr->zf, cr->sf, cr->of);
+           flags.cf, flags.zf, flags.sf, flags.of);
 }
 
 void logStack(Core *cr) {
