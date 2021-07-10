@@ -305,6 +305,10 @@ static void parseInst(const char *str, Inst *inst, Core *cr) {
 
     int state = 0;
     int ca = 0; // number of '(' or ')'
+
+    // status:      0     1     2     3     4         5     6     7
+    // inst format: _    opt    _    opd    _    ,    _    opd    _
+    // use '_' to represent space
     for (int i = 0; i < strlen(str); ++i) {
         char ch = str[i];
         if (ch == '(' || ch == ')') {
@@ -352,6 +356,7 @@ static void parseInst(const char *str, Inst *inst, Core *cr) {
          opt, inst->opt, src, inst->src.type, dst, inst->dst.type);
 }
 
+// parse an operator string to a integer
 static void parseOpt(const char *str, Opt *opt, Core *cr) {
     if (startsWith("mov", str)) {
         *opt = MOV;
