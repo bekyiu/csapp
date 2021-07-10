@@ -4,6 +4,7 @@
 
 #include <stdint.h>
 #include <stdio.h>
+#include <string.h>
 #include "../../header/cpu.h"
 #include "../../header/memory.h"
 #include "../../header/common.h"
@@ -33,4 +34,17 @@ uint64_t read64Dram(uint64_t pAddr, Core *cr) {
         }
         return val;
     }
+}
+
+
+void writeInstDram(uint64_t pAddr, const char *instStr, Core *cr) {
+    size_t len = strlen(instStr);
+    if (len > MAX_INSTRUCTION_CHAR) {
+        throw("instruction error: %s\n", instStr);
+    }
+    // todo...
+}
+
+void readInstDram(uint64_t pAddr, char *buf, Core *cr) {
+
 }

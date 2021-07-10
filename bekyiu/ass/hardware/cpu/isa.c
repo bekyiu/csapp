@@ -178,8 +178,7 @@ static uint64_t regAddr(const char *str, Core *cr) {
             return regAddrs[i];
         }
     }
-    printf("parse register %s error\n", str);
-    exit(0);
+    throw("parse register %s error\n", str);
 }
 
 // parse access memory operand, build it's Opd object
@@ -247,8 +246,7 @@ static void parseAccessMemoryOpd(const char *str, Opd *opd, Core *cr, size_t len
     if (scaleLen > 0) {
         uint64_t s = str2uint(scale);
         if (s != 0x1 && s != 0x2 && s != 0x4 && s != 0x8) {
-            printf("%s is not a legal scale\n", scale);
-            exit(0);
+            throw("%s is not a legal scale\n", scale);
         }
         opd->scale = s;
     }
@@ -258,8 +256,7 @@ static void parseAccessMemoryOpd(const char *str, Opd *opd, Core *cr, size_t len
         return;
     }
     if (ca == 1) {
-        printf("%s is not a legal operand, miss ')'\n", str);
-        exit(0);
+        throw("%s is not a legal operand, miss ')'\n", str);
     }
     if (cb == 0) {
         if (immLen > 0) {

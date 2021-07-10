@@ -30,8 +30,9 @@ uint8_t pm[PHYSICAL_MEMORY_SPACE];
 
 // used by instructions: read or write uint64_t to DRAM
 uint64_t read64Dram(uint64_t pAddr, Core *cr);
-
 void write64Dram(uint64_t pAddr, uint64_t data, Core *cr);
 
+void writeInstDram(uint64_t pAddr, const char *instStr, Core *cr);
+void readInstDram(uint64_t pAddr, char *buf, Core *cr);
 
 #endif //CSAPP_MEMORY_H

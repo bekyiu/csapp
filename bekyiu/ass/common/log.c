@@ -16,7 +16,7 @@ uint64_t slog(uint64_t openSet, const char *format, ...) {
     // implementation of std printf()
     va_list argPtr;
     va_start(argPtr, format);
-    vfprintf(stderr, format, argPtr);
+    vfprintf(stdout, format, argPtr);
     va_end(argPtr);
 
     return 0x0;

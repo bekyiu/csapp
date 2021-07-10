@@ -73,7 +73,7 @@ uint64_t str2uintRange(const char *str, int start, int end) {
                 uv = uv * 10 + ch - '0';
                 // may be overflow
                 if (pv > uv) {
-                    printf("(uint64_t)%s overflow: cannot convert\n", str);
+                    elog("(uint64_t)%s overflow: cannot convert\n", str);
                     goto fail;
                 }
                 continue;
@@ -118,7 +118,7 @@ uint64_t str2uintRange(const char *str, int start, int end) {
                 uv = uv * 16 + ch - '0';
                 // maybe overflow
                 if (pv > uv) {
-                    printf("(uint64_t)%s overflow: cannot convert\n", str);
+                    elog("(uint64_t)%s overflow: cannot convert\n", str);
                     goto fail;
                 }
                 continue;
@@ -128,7 +128,7 @@ uint64_t str2uintRange(const char *str, int start, int end) {
                 uv = uv * 16 + ch - 'a' + 10;
                 // maybe overflow
                 if (pv > uv) {
-                    printf("(uint64_t)%s overflow: cannot convert\n", str);
+                    elog("(uint64_t)%s overflow: cannot convert\n", str);
                     goto fail;
                 }
                 continue;
@@ -149,14 +149,14 @@ uint64_t str2uintRange(const char *str, int start, int end) {
     }
 
     if ((uv >> 63) == 1) {
-        printf("(int64_t)%s: signed overflow: cannot convert\n", str);
+        elog("(int64_t)%s: signed overflow: cannot convert\n", str);
         exit(0);
     }
     int64_t sv = -1 * (int64_t) uv;
     return *((uint64_t *) &sv);
 
     fail:
-    printf("type converter: <%s> cannot be converted to integer\n", str);
+    elog("type converter: <%s> cannot be converted to integer\n", str);
     exit(0);
 }
 
