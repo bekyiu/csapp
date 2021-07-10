@@ -16,11 +16,15 @@ void logReg(Core *cr);
 
 void logStack(Core *cr);
 
+void testParsingOperand();
+
 int main() {
 //    testAddFunctionCallAndComputation();
-    testStr2Uint();
+//    testStr2Uint();
+    testParsingOperand();
     return 0;
 }
+
 
 void testStr2Uint() {
     char *nums[] = {

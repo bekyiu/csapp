@@ -180,6 +180,119 @@ static uint64_t regAddr(const char *str, Core *cr) {
     exit(0);
 }
 
+// parse access memory operand, build it's Opd object
+static void parseAccessMemoryOpd(const char *str, Opd *opd, Core *cr, size_t len) {
+    // format: imm(reg1,reg2,scale)
+    char imm[64] = {'\0'};
+    int immLen = 0;
+    char scale[64] = {'\0'};
+    int scaleLen = 0;
+    char reg1[64] = {'\0'};
+    int reg1Len = 0;
+    char reg2[64] = {'\0'};
+    int reg2Len = 0;
+
+    // number of '(' or ')'
+    int ca = 0;
+    // number of ','
+    int cb = 0;
+
+    for (size_t i = 0; i < len; i++) {
+        char ch = str[i];
+        if (ch == '(' || ch == ')') {
+            ca++;
+            continue;
+        }
+        if (ch == ',') {
+            cb++;
+            continue;
+        }
+
+        // x(... now parsing x
+        if (ca == 0) {
+            imm[immLen++] = ch;
+            continue;
+        }
+        if (ca == 1) {
+            // a(x,...
+            if (cb == 0) {
+                reg1[reg1Len++] = ch;
+                continue;
+            }
+            // a(a,x,...
+            if (cb == 1) {
+                reg2[reg2Len++] = ch;
+                continue;
+            }
+            // a(a,a,x...
+            if (cb == 2) {
+                scale[scaleLen++] = ch;
+                continue;
+            }
+        }
+    }
+
+    // set opd value
+    if (immLen > 0) {
+        opd->imm = str2uint(imm);
+    }
+    if (reg1Len > 0) {
+        opd->reg1 = regAddr(reg1, cr);
+    }
+    if (reg2Len > 0) {
+        opd->reg2 = regAddr(reg2, cr);
+    }
+    if (scaleLen > 0) {
+        uint64_t s = str2uint(scale);
+        if (s != 0x1 && s != 0x2 && s != 0x4 && s != 0x8) {
+            printf("%s is not a legal scale\n", scale);
+            exit(0);
+        }
+        opd->scale = s;
+    }
+    // set opd type
+    if (ca == 0) {
+        opd->type = MEM_IMM;
+        return;
+    }
+    if (ca == 1) {
+        printf("%s is not a legal operand, miss ')'\n", str);
+        exit(0);
+    }
+    if (cb == 0) {
+        if (immLen > 0) {
+            opd->type = MEM_IMM_REG;
+            return;
+        }
+        opd->type = MEM_REG;
+        return;
+    }
+    // now ca == 2
+    if (cb == 1) {
+        if (immLen > 0) {
+            opd->type = MEM_IMM_REG1_REG2;
+            return;
+        }
+        opd->type = MEM_REG1_REG2;
+        return;
+    }
+    // now cb == 2
+    if (immLen > 0) {
+        if (reg1Len > 0) {
+            opd->type = MEM_IMM_REG1_REG2_S;
+            return;
+        }
+        opd->type = MEM_IMM_REG2_S;
+        return;
+    }
+    // now cb == 2 and immLen == 0
+    if (reg1Len > 0) {
+        opd->type = MEM_REG1_REG2_S;
+        return;
+    }
+    opd->type = MEM_REG2_S;
+}
+
 static void parseInst(const char *str, Inst *inst, Core *cr) {
 
 }
@@ -211,7 +324,7 @@ static void parseOpd(const char *str, Opd *opd, Core *cr) {
         return;
     }
     // memory
-
+    parseAccessMemoryOpd(str, opd, cr, len);
 }
 
 
@@ -493,5 +606,41 @@ void logStack(Core *cr) {
         va -= 8;
 
         printf("\n");
+    }
+}
+
+
+void testParsingOperand() {
+    ACTIVE_CORE = 0x0;
+    Core *ac = (Core *) &cores[ACTIVE_CORE];
+
+    const char *strs[11] = {
+            "$0x1234",
+            "%rax",
+            "0xabcd",
+            "(%rsp)",
+            "0xabcd(%rsp)",
+            "(%rsp,%rbx)",
+            "0xabcd(%rsp,%rbx)",
+            "(,%rbx,8)",
+            "0xabcd(,%rbx,8)",
+            "(%rsp,%rbx,8)",
+            "0xabcd(%rsp,%rbx,8)",
+    };
+
+    printf("rax %p\n", &(ac->regs.rax));
+    printf("rsp %p\n", &(ac->regs.rsp));
+    printf("rbx %p\n", &(ac->regs.rbx));
+
+    for (int i = 0; i < 11; ++i) {
+        Opd opd;
+        parseOpd(strs[i], &opd, ac);
+
+        printf("\n%s\n", strs[i]);
+        printf("od enum type: %d, is correct: %d\n", opd.type, opd.type == i + 1);
+        printf("od imm: %llx\n", opd.imm);
+        printf("od reg1: %llx\n", opd.reg1);
+        printf("od reg2: %llx\n", opd.reg2);
+        printf("od scale: %llx\n", opd.scale);
     }
 }
