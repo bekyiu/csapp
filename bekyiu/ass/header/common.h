@@ -6,6 +6,7 @@
 #define CSAPP_COMMON_H
 
 #include <stdint.h>
+#include <stdbool.h>
 
 #define DEBUG_INSTRUCTION_CYCLE      0x1
 #define DEBUG_REGISTERS              0x2
@@ -17,7 +18,7 @@
 #define DEBUG_LOADER                 0x80
 #define DEBUG_PARSE_INST             0x100
 
-#define DEBUG_VERBOSE_SET            DEBUG_INSTRUCTION_CYCLE
+#define DEBUG_VERBOSE_SET            DEBUG_INSTRUCTION_CYCLE | DEBUG_PARSE_INST
 
 // do page walk
 #define DEBUG_ENABLE_PAGE_WALK      0
@@ -36,5 +37,7 @@ uint32_t uint2float(uint32_t u);
 uint64_t str2uint(const char *str);
 
 uint64_t str2uintRange(const char *str, int start, int end);
+
+bool startsWith(const char *pre, const char *str);
 
 #endif //CSAPP_COMMON_H

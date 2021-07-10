@@ -159,3 +159,10 @@ uint64_t str2uintRange(const char *str, int start, int end) {
     printf("type converter: <%s> cannot be converted to integer\n", str);
     exit(0);
 }
+
+
+bool startsWith(const char *pre, const char *str) {
+    size_t preLen = strlen(pre);
+    size_t strLen = strlen(str);
+    return strLen < preLen ? false : memcmp(pre, str, preLen) == 0;
+}

@@ -82,6 +82,8 @@ static void parseInst(const char *str, Inst *inst, Core *cr);
 
 static void parseOpd(const char *str, Opd *opd, Core *cr);
 
+static void parseOpt(const char *str, Opt *opt, Core *cr);
+
 static uint64_t decodeOpd(Opd *opd);
 
 // return the real operand
@@ -294,7 +296,107 @@ static void parseAccessMemoryOpd(const char *str, Opd *opd, Core *cr, size_t len
 }
 
 static void parseInst(const char *str, Inst *inst, Core *cr) {
+    char opt[64] = {'\0'};
+    int optLen = 0;
+    char src[64] = {'\0'};
+    int srcLen = 0;
+    char dst[64] = {'\0'};
+    int dstLen = 0;
 
+    int state = 0;
+    int ca = 0; // number of '(' or ')'
+    for (int i = 0; i < strlen(str); ++i) {
+        char ch = str[i];
+        if (ch == '(' || ch == ')') {
+            ca++;
+        }
+        if (state == 0 && ch != ' ') {
+            state = 1;
+        } else if (state == 1 && ch == ' ') {
+            state = 2;
+            continue;
+        } else if (state == 2 && ch != ' ') {
+            state = 3;
+        } else if (state == 3 && ch == ' ') {
+            state = 4;
+            continue;
+        } else if (ch == ',' && (ca == 2 || ca == 0)) {
+            state = 5;
+            continue;
+        } else if (state == 5 && ch != ' ') {
+            state = 6;
+        } else if (state == 6 && ch == ' ') {
+            state = 7;
+        }
+
+        // fill in the corresponding str
+        if (state == 1) {
+            opt[optLen++] = ch;
+            continue;
+        }
+        if (state == 3) {
+            src[srcLen++] = ch;
+            continue;
+        }
+        if (state == 6) {
+            dst[dstLen++] = ch;
+            continue;
+        }
+    }
+
+    parseOpd(src, &(inst->src), cr);
+    parseOpd(dst, &(inst->dst), cr);
+    parseOpt(opt, &(inst->opt), cr);
+
+    slog(DEBUG_PARSE_INST, "[%s (%d)] [%s (%d)] [%s (%d)]\n",
+         opt, inst->opt, src, inst->src.type, dst, inst->dst.type);
+}
+
+static void parseOpt(const char *str, Opt *opt, Core *cr) {
+    if (startsWith("mov", str)) {
+        *opt = MOV;
+        return;
+    }
+    if (startsWith("push", str)) {
+        *opt = PUSH;
+        return;
+    }
+    if (startsWith("pop", str)) {
+        *opt = POP;
+        return;
+    }
+    if (startsWith("leave", str)) {
+        *opt = LEAVE;
+        return;
+    }
+    if (startsWith("call", str)) {
+        *opt = CALL;
+        return;
+    }
+    if (startsWith("ret", str)) {
+        *opt = RET;
+        return;
+    }
+    if (startsWith("add", str)) {
+        *opt = ADD;
+        return;
+    }
+    if (startsWith("sub", str)) {
+        *opt = SUB;
+        return;
+    }
+    if (startsWith("cmp", str)) {
+        *opt = CMP;
+        return;
+    }
+    if (startsWith("jne", str)) {
+        *opt = JNE;
+        return;
+    }
+    if (startsWith("jmp", str)) {
+        *opt = JMP;
+        return;
+    }
 }
 
 // parse an operand string to an Opd object
@@ -609,6 +711,33 @@ void logStack(Core *cr) {
     }
 }
 
+void testParsingInstruction() {
+    ACTIVE_CORE = 0x0;
+    Core *ac = (Core *) &cores[ACTIVE_CORE];
+
+    char assembly[15][MAX_INSTRUCTION_CHAR] = {
+            "push   %rbp",              // 0
+            "mov    %rsp,%rbp",         // 1
+            "mov    %rdi,-0x18(%rbp)",  // 2
+            "mov    %rsi,-0x20(%rbp)",  // 3
+            "mov    -0x18(%rbp),%rdx",  // 4
+            "mov    -0x20(%rbp),%rax",  // 5
+            "add    %rdx,%rax",         // 6
+            "mov    %rax,-0x8(%rbp)",   // 7
+            "mov    -0x8(%rbp),%rax",   // 8
+            "pop    %rbp",              // 9
+            "retq",                     // 10
+            "mov    %rdx,%rsi",         // 11
+            "mov    %rax,%rdi",         // 12
+            "callq  0",                 // 13
+            "mov    %rax,-0x8(%rbp)",   // 14
+    };
+
+    Inst inst;
+    for (int i = 0; i < 15; ++i) {
+        parseInst(assembly[i], &inst, ac);
+    }
+}
 
 void testParsingOperand() {
     ACTIVE_CORE = 0x0;

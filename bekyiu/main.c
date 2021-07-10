@@ -18,10 +18,13 @@ void logStack(Core *cr);
 
 void testParsingOperand();
 
+void testParsingInstruction();
+
 int main() {
-//    testAddFunctionCallAndComputation();
+    testAddFunctionCallAndComputation();
 //    testStr2Uint();
-    testParsingOperand();
+//    testParsingOperand();
+//    testParsingInstruction();
     return 0;
 }
 
