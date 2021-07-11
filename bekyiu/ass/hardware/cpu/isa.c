@@ -655,7 +655,8 @@ static void jmpHandler(Opd *srcOpd, Opd *dstOpd, Core *cr) {
 // the only exposed interface outside CPU
 void instCycle(Core *cr) {
     // fetch: get the instruction string by program counter
-    const char *instStr = (const char *) cr->rip;
+    char instStr[MAX_INSTRUCTION_CHAR];
+    readInstDram(va2pa(cr->rip, cr), instStr, cr);
     slog(DEBUG_INSTRUCTION_CYCLE, "%lx    %s\n", cr->rip, instStr);
 
     // decode: decode the run-time instruction operands

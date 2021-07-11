@@ -42,9 +42,17 @@ void writeInstDram(uint64_t pAddr, const char *instStr, Core *cr) {
     if (len > MAX_INSTRUCTION_CHAR) {
         throw("instruction error: %s\n", instStr);
     }
-    // todo...
+    for (int i = 0; i < MAX_INSTRUCTION_CHAR; ++i) {
+        if (i < len) {
+            pm[pAddr + i] = instStr[i];
+        } else {
+            pm[pAddr + i] = '\0';
+        }
+    }
 }
 
 void readInstDram(uint64_t pAddr, char *buf, Core *cr) {
-
+    for (int i = 0; i < MAX_INSTRUCTION_CHAR; ++i) {
+        buf[i] = pm[pAddr + i];
+    }
 }
