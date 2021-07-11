@@ -179,12 +179,17 @@ void testAddFunctionCallAndComputation() {
             "retq",                     // 10
             "mov    %rdx,%rsi",         // 11
             "mov    %rax,%rdi",         // 12
-            "callq  0",                 // 13, the addr will be replace during the run time
+            "callq  0x00400000",        // 13
             "mov    %rax,-0x8(%rbp)",   // 14
     };
 
-    ac->rip = (uint64_t) &assembly[11];
-    sprintf(assembly[13], "callq  $%p", &assembly[0]);
+
+    // copy to physical memory
+    for (int i = 0; i < 15; ++i) {
+        writeInstDram(va2pa(i * 0x40 + 0x00400000, ac), assembly[i], ac);
+    }
+    ac->rip = 0x40 * 11 + 0x00400000;
+
 
     // run
     for (int i = 0; i < 15; ++i) {

@@ -59,8 +59,8 @@ typedef enum OpdType {
 // operand
 typedef struct Opd {
     OpdType type;
-    int64_t imm;
-    int64_t scale;
+    uint64_t imm;
+    uint64_t scale;
     uint64_t reg1;
     uint64_t reg2;
 } Opd;
@@ -89,8 +89,9 @@ static uint64_t decodeOpd(Opd *opd);
 // return the real operand
 static uint64_t decodeOpd(Opd *opd) {
     if (opd->type == IMM) {
+        return opd->imm;
         // immediate signed number can be negative: convert to bitmap
-        return *((uint64_t *) &opd->imm);
+        // return *((uint64_t *) &opd->imm);
     }
     if (opd->type == REG) {
         return opd->reg1;
@@ -486,8 +487,22 @@ static InstHandler handlerTable[NUM_INSTRUCTION_TYPE] = {
 
 // reset the condition flags
 // inline to reduce cost
-static inline void resetCFlags(Core *cr) {
+static inline void clearFlags(Core *cr) {
     cr->flags._value = 0;
+}
+
+static void setFlags(uint64_t srcVal, uint64_t dstVal, uint64_t val, Core *cr) {
+    uint8_t srcSign = (srcVal >> 63) & 0x1;
+    uint8_t dstSign = (dstVal >> 63) & 0x1;
+    uint8_t valSign = (val >> 63) & 0x1;
+
+    // unsigned overflow: two unsigned add but result be smaller
+    cr->flags.cf = srcVal > val;
+    cr->flags.zf = (val == 0);
+    cr->flags.sf = valSign;
+    // signed overflow: same sign bit operand add but result get different sign bit
+    cr->flags.of = (srcSign == 0 && dstSign == 0 && valSign == 1) ||
+                   (srcSign == 1 && dstSign == 1 && valSign == 0);
 }
 
 // update the rip pointer to the next instruction sequentially
@@ -510,7 +525,7 @@ static void movHandler(Opd *srcOpd, Opd *dstOpd, Core *cr) {
         // dst: register
         *(uint64_t *) dst = *(uint64_t *) src;
         nextRip(cr);
-        resetCFlags(cr);
+        clearFlags(cr);
         return;
     }
     if (srcOpd->type == REG && dstOpd->type >= MEM_IMM) {
@@ -522,7 +537,7 @@ static void movHandler(Opd *srcOpd, Opd *dstOpd, Core *cr) {
                 cr
         );
         nextRip(cr);
-        resetCFlags(cr);
+        clearFlags(cr);
         return;
     }
     if (srcOpd->type >= MEM_IMM && dstOpd->type == REG) {
@@ -532,7 +547,7 @@ static void movHandler(Opd *srcOpd, Opd *dstOpd, Core *cr) {
                 va2pa(src, cr),
                 cr);
         nextRip(cr);
-        resetCFlags(cr);
+        clearFlags(cr);
         return;
     }
     if (srcOpd->type == IMM && dstOpd->type == REG) {
@@ -540,7 +555,7 @@ static void movHandler(Opd *srcOpd, Opd *dstOpd, Core *cr) {
         // dst: register
         *(uint64_t *) dst = src;
         nextRip(cr);
-        resetCFlags(cr);
+        clearFlags(cr);
         return;
     }
 }
@@ -559,7 +574,7 @@ static void pushHandler(Opd *srcOpd, Opd *dstOpd, Core *cr) {
                 cr
         );
         nextRip(cr);
-        resetCFlags(cr);
+        clearFlags(cr);
         return;
     }
 }
@@ -577,12 +592,9 @@ static void popHandler(Opd *srcOpd, Opd *dstOpd, Core *cr) {
         regs->rsp = regs->rsp + 8;
         *(uint64_t *) src = val;
         nextRip(cr);
-        resetCFlags(cr);
+        clearFlags(cr);
         return;
     }
-}
-
-static void leaveHandler(Opd *srcOpd, Opd *dstOpd, Core *cr) {
 }
 
 static void callHandler(Opd *srcOpd, Opd *dstOpd, Core *cr) {
@@ -600,7 +612,7 @@ static void callHandler(Opd *srcOpd, Opd *dstOpd, Core *cr) {
     );
     // jump to target function address
     cr->rip = src;
-    resetCFlags(cr);
+    clearFlags(cr);
 }
 
 static void retHandler(Opd *srcOpd, Opd *dstOpd, Core *cr) {
@@ -616,7 +628,7 @@ static void retHandler(Opd *srcOpd, Opd *dstOpd, Core *cr) {
     regs->rsp = regs->rsp + 8;
     // jump to return address
     cr->rip = retAddr;
-    resetCFlags(cr);
+    clearFlags(cr);
 }
 
 static void addHandler(Opd *srcOpd, Opd *dstOpd, Core *cr) {
@@ -626,9 +638,12 @@ static void addHandler(Opd *srcOpd, Opd *dstOpd, Core *cr) {
     if (srcOpd->type == REG && dstOpd->type == REG) {
         // src: register (value: int64_t bit map)
         // dst: register (value: int64_t bit map)
-        uint64_t val = *(uint64_t *) dst + *(uint64_t *) src;
+        uint64_t dstVal = *(uint64_t *) dst;
+        uint64_t srcVal = *(uint64_t *) src;
+        uint64_t val = dstVal + srcVal;
 
         // set condition flags
+        setFlags(srcVal, dstVal, val, cr);
 
         // update registers
         *(uint64_t *) dst = val;
@@ -640,15 +655,78 @@ static void addHandler(Opd *srcOpd, Opd *dstOpd, Core *cr) {
 }
 
 static void subHandler(Opd *srcOpd, Opd *dstOpd, Core *cr) {
+    uint64_t src = decodeOpd(srcOpd);
+    uint64_t dst = decodeOpd(dstOpd);
+
+    if (srcOpd->type == IMM && dstOpd->type == REG) {
+        uint64_t dstVal = *(uint64_t *) dst;
+        uint64_t srcVal = ~src + 1;
+        // dst = dst - src = dst + (-src)
+        uint64_t val = dstVal + srcVal;
+
+        // set condition flags
+        setFlags(dstVal, srcVal, val, cr);
+
+        // update registers
+        *(uint64_t *) dst = val;
+        nextRip(cr);
+        return;
+    }
 }
 
 static void cmpHandler(Opd *srcOpd, Opd *dstOpd, Core *cr) {
+    uint64_t src = decodeOpd(srcOpd);
+    uint64_t dst = decodeOpd(dstOpd);
+
+    if (srcOpd->type == IMM && dstOpd->type >= MEM_IMM) {
+        uint64_t dstVal = ~read64Dram(va2pa(dst, cr), cr) + 1;
+        uint64_t srcVal = src;
+        // dst - src = dst + (-src)
+        uint64_t val = dstVal + srcVal;
+
+        // set condition flags
+        setFlags(dstVal, srcVal, val, cr);
+
+        // update registers
+        nextRip(cr);
+        return;
+    }
 }
 
 static void jneHandler(Opd *srcOpd, Opd *dstOpd, Core *cr) {
+    // jne    0x400200
+    // now 0x400200 will be parsed as a memory instruction
+    // but it is actually a immediate number, so we do not check the instruction type
+    uint64_t src = decodeOpd(srcOpd);
+
+    if (cr->flags.zf) {
+        nextRip(cr);
+    } else {
+        cr->rip = src;
+    }
+    clearFlags(cr);
 }
 
 static void jmpHandler(Opd *srcOpd, Opd *dstOpd, Core *cr) {
+    // also do not check the instruction type
+    uint64_t src = decodeOpd(srcOpd);
+    cr->rip = src;
+    clearFlags(cr);
+}
+
+static void leaveHandler(Opd *srcOpd, Opd *dstOpd, Core *cr) {
+    Regs *regs = &(cr->regs);
+    // mov %rbp, %rsp
+    regs->rsp = regs->rbp;
+    // pop %rbp
+    uint64_t val = read64Dram(
+            va2pa(regs->rsp, cr),
+            cr
+    );
+    regs->rsp = regs->rsp + 8;
+    regs->rbp = val;
+    nextRip(cr);
+    clearFlags(cr);
 }
 
 // instruction cycle is implemented in CPU
@@ -667,51 +745,6 @@ void instCycle(Core *cr) {
     InstHandler handler = handlerTable[inst.opt];
     // update CPU and memory according the instruction
     handler(&(inst.src), &(inst.dst), cr);
-}
-
-
-void logReg(Core *cr) {
-    if ((DEBUG_VERBOSE_SET & DEBUG_REGISTERS) == 0x0) {
-        return;
-    }
-
-    Regs regs = cr->regs;
-    Flags flags = cr->flags;
-    printf("rax = %16llx\trbx = %16llx\trcx = %16llx\trdx = %16llx\n",
-           regs.rax, regs.rbx, regs.rcx, regs.rdx);
-    printf("rsi = %16llx\trdi = %16llx\trbp = %16llx\trsp = %16llx\n",
-           regs.rsi, regs.rdi, regs.rbp, regs.rsp);
-    printf("rip = %16llx\n", cr->rip);
-    printf("CF = %u\tZF = %u\tSF = %u\tOF = %u\n",
-           flags.cf, flags.zf, flags.sf, flags.of);
-}
-
-void logStack(Core *cr) {
-    if ((DEBUG_VERBOSE_SET & DEBUG_PRINT_STACK) == 0x0) {
-        return;
-    }
-    Regs regs = cr->regs;
-
-    int n = 10;
-    // physical address of the top of stack
-    uint64_t *low = (uint64_t *) &pm[va2pa(regs.rsp, cr)];
-    // bias to high address
-    uint64_t *high = &low[n];
-
-    uint64_t va = regs.rsp + n * 8;
-
-    for (int i = 0; i < 2 * n; ++i) {
-        uint64_t *ptr = (uint64_t *) (high - i);
-        printf("0x%016llx : %16llx", va, (uint64_t) *ptr);
-
-        if (i == n) {
-            printf(" <== rsp");
-        }
-
-        va -= 8;
-
-        printf("\n");
-    }
 }
 
 void testParsingInstruction() {
