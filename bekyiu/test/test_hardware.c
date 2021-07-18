@@ -2,10 +2,9 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <limits.h>
-#include "ass/header/cpu.h"
-#include "ass/header/common.h"
-#include "ass/header/memory.h"
-
+#include "../ass/header/cpu.h"
+#include "../ass/header/common.h"
+#include "../ass/header/memory.h"
 
 static void testAddFunctionCallAndComputation();
 
@@ -23,7 +22,7 @@ void testParsingInstruction();
 void testSumRecursiveCondition();
 
 
-int main() {
+int mainHardware() {
 //    testAddFunctionCallAndComputation();
 //    testStr2Uint();
 //    testParsingOperand();
