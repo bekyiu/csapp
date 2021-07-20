@@ -38,24 +38,49 @@ bool isComment(const char *str) {
     return str[0] == '/' && str[1] == '/';
 }
 
-int readElf(const char *filename, uint64_t bufAddr) {
+int readElf(const char *filename, uint64_t baseAddr) {
     FILE *f = fopen(filename, "r");
     if (f == NULL) {
         throw("%s\n", strerror(errno));
     }
-    char line[MAX_ELF_FILE_WIDTH];
+    char line[MAX_ELF_FILE_COLUMN];
     int lineCount = 0;
-    while (fgets(line, MAX_ELF_FILE_WIDTH, f) != NULL) {
+    while (fgets(line, MAX_ELF_FILE_COLUMN, f) != NULL) {
         if (isWhite(line)) {
             continue;
         }
         if (isComment(line)) {
             continue;
         }
+        if (lineCount > MAX_ELF_FILE_ROW) {
+            throw("elf file [%s] is to large, expected max size is %d lines",
+                  filename, MAX_ELF_FILE_ROW);
+        }
+
+        // store into buffer
+        size_t len = strlen(line);
+        uint64_t bufAddr = baseAddr + lineCount * MAX_ELF_FILE_COLUMN * sizeof(char);
+        char *buffer = (char *) bufAddr;
+        int i;
+        for (i = 0; i < len; ++i) {
+            if (line[i] == '\n' || line[i] == '\r') {
+                break;
+            }
+            // in-line comment
+            if ((i + 1 < len) && (i + 1 < MAX_ELF_FILE_COLUMN) && line[i] == '/' && line[i + 1] == '/') {
+                break;
+            }
+            buffer[i] = line[i];
+        }
+        buffer[i] = '\0';
         lineCount++;
-        printf("%s", line);
     }
 
     fclose(f);
+    // check first line is correct
+    char (*buf)[MAX_ELF_FILE_COLUMN] = (char (*)[MAX_ELF_FILE_COLUMN])baseAddr;
+    if (str2uint(buf[0]) != lineCount) {
+        throw("read elf error!");
+    }
     return lineCount;
 }
