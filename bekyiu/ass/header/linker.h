@@ -49,7 +49,7 @@ typedef struct {
     uint64_t offset;
     // count of lines of section; sh_size
     uint64_t lineCount;
-} ShEntry;
+} ShtEntry;
 
 // ================== elf file ======================
 
@@ -61,7 +61,15 @@ typedef struct {
     // effective lines
     uint64_t lineCount;
     // section header table start pointer
-    ShEntry *sht;
+    ShtEntry *sht;
+    uint64_t shtCount;
+
+    // symtab
+    StEntry *st;
+    uint64_t stCount;
 } Elf;
 
+void logElf(Elf *elf);
+void freeElf(Elf *elf);
+void parseElf(char *filename, Elf *elf);
 #endif //CSAPP_LINKER_H
