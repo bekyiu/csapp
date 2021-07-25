@@ -72,4 +72,5 @@ typedef struct {
 void logElf(Elf *elf);
 void freeElf(Elf *elf);
 void parseElf(char *filename, Elf *elf);
+void linkElf(Elf **srcElfs, int srcNum, Elf *dstElf);
 #endif //CSAPP_LINKER_H
