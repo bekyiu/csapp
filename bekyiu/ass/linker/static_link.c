@@ -8,6 +8,7 @@
 #include <string.h>
 #include "../header/linker.h"
 #include "../header/common.h"
+#include "../header/cpu.h"
 
 #define MAX_SYMBOL_MAP_LENGTH 64
 #define MAX_SECTION_BUFFER_LENGTH 64
@@ -20,6 +21,7 @@ typedef struct {
     StEntry *srcSte;
     StEntry *dstSte;
 } SteMap;
+
 
 // return the symbol precedence
 int symbolPrecedence(StEntry *ste) {
@@ -122,7 +124,7 @@ void symbolProcessing(Elf **srcElfs, int srcNum, Elf *dstElf, SteMap *steMaps, i
         StEntry *ste = steMaps[i].srcSte;
         assert(strcmp(ste->inSecName, "SHN_UNDEF") != 0);
         assert(ste->type != STT_NOTYPE);
-        if (strcmp(ste->inSecName, "COMMON")  == 0) {
+        if (strcmp(ste->inSecName, "COMMON") == 0) {
             // still has common symbol, put it in .bss
             strcpy(ste->inSecName, ".bss");
             ste->inSecOffset = 0;
@@ -130,6 +132,36 @@ void symbolProcessing(Elf **srcElfs, int srcNum, Elf *dstElf, SteMap *steMaps, i
     }
 }
 
+void computeSectionHeader(Elf *dst, SteMap *steMaps, int *steMapCount) {
+    // compute section line count
+    uint64_t textLineCount = 0;
+    uint64_t dataLineCount = 0;
+    uint64_t rodataLineCount = 0;
+
+    for (int i = 0; i < *steMapCount; ++i) {
+        StEntry *ste = steMaps[i].srcSte;
+        if (strcmp(ste->inSecName, ".text") == 0) {
+            textLineCount += ste->lineCount;
+        } else if (strcmp(ste->inSecName, ".rodata") == 0) {
+            rodataLineCount += ste->lineCount;
+        } else if (strcmp(ste->inSecName, ".data") == 0) {
+            dataLineCount += ste->lineCount;
+        }
+    }
+
+    // plus one means add .symtab
+    dst->shtCount = (textLineCount != 0) + (dataLineCount != 0) + (rodataLineCount != 0) + 1;
+    dst->lineCount = 1 + 1 + dst->shtCount + textLineCount + dataLineCount + rodataLineCount + *steMapCount;
+    dst->stCount = *steMapCount;
+    sprintf(dst->buffer[0], "%lld", dst->lineCount);
+    sprintf(dst->buffer[1], "%lld", dst->shtCount);
+
+    // compute the run-time address of the sections: compact in memory
+    uint64_t textRuntimeAddr = 0x00400000;
+    uint64_t rodataRuntimeAddr = textRuntimeAddr + textLineCount * MAX_INSTRUCTION_CHAR * sizeof(char);
+    uint64_t dataRuntimeAddr = rodataRuntimeAddr + rodataLineCount * sizeof(uint64_t);
+    uint64_t symtabRuntimeAddr = 0; // For EOF, .symtab is not loaded into run-time memory but still on disk
+}
 
 void linkElf(Elf **srcElfs, int srcNum, Elf *dstElf) {
     memset(dstElf, 0, sizeof(Elf));
@@ -144,6 +176,11 @@ void linkElf(Elf **srcElfs, int srcNum, Elf *dstElf) {
         printf("%s\t%d\t%d\t%s\t%llu\t%llu\n", e->name, e->bind, e->type,
                e->inSecName, e->inSecOffset, e->lineCount);
     }
+
+    // compute and write dst EOF file header: include sht, line count, sht count
+    computeSectionHeader(dstElf, steMaps, &steMapCount);
 }
+
+
 
 
