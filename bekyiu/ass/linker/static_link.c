@@ -161,6 +161,141 @@ void computeSectionHeader(Elf *dst, SteMap *steMaps, int *steMapCount) {
     uint64_t rodataRuntimeAddr = textRuntimeAddr + textLineCount * MAX_INSTRUCTION_CHAR * sizeof(char);
     uint64_t dataRuntimeAddr = rodataRuntimeAddr + rodataLineCount * sizeof(uint64_t);
     uint64_t symtabRuntimeAddr = 0; // For EOF, .symtab is not loaded into run-time memory but still on disk
+
+    // write sht
+    dst->sht = malloc(dst->shtCount * sizeof(ShtEntry));
+    uint64_t sectionOffset = 1 + 1 + dst->shtCount;
+    int shteIdx = 0;
+    ShtEntry *shte = NULL;
+    // .text
+    if (textLineCount > 0) {
+        // write sht entry
+        shte = &(dst->sht[shteIdx]);
+        strcpy(shte->name, ".text");
+        shte->shAddr = textRuntimeAddr;
+        shte->offset = sectionOffset;
+        shte->lineCount = textLineCount;
+        // write dst buffer
+        sprintf(dst->buffer[2 + shteIdx], "%s,0x%llx,%lld,%lld",
+                shte->name, shte->shAddr, shte->offset, shte->lineCount);
+
+        shteIdx++;
+        sectionOffset += textLineCount;
+    }
+    // .rodata
+    if (rodataLineCount > 0) {
+        shte = &(dst->sht[shteIdx]);
+        strcpy(shte->name, ".rodata");
+        shte->shAddr = rodataRuntimeAddr;
+        shte->offset = sectionOffset;
+        shte->lineCount = rodataLineCount;
+        sprintf(dst->buffer[2 + shteIdx], "%s,0x%llx,%lld,%lld",
+                shte->name, shte->shAddr, shte->offset, shte->lineCount);
+
+        shteIdx++;
+        sectionOffset += rodataLineCount;
+    }
+    // .data
+    if (dataLineCount > 0) {
+        shte = &(dst->sht[shteIdx]);
+        strcpy(shte->name, ".data");
+        shte->shAddr = dataRuntimeAddr;
+        shte->offset = sectionOffset;
+        shte->lineCount = dataLineCount;
+        sprintf(dst->buffer[2 + shteIdx], "%s,0x%llx,%lld,%lld",
+                shte->name, shte->shAddr, shte->offset, shte->lineCount);
+
+        shteIdx++;
+        sectionOffset += dataLineCount;
+    }
+    // .symtab
+    if (*steMapCount > 0) {
+        shte = &(dst->sht[shteIdx]);
+        strcpy(shte->name, ".symtab");
+        shte->shAddr = symtabRuntimeAddr;
+        shte->offset = sectionOffset;
+        shte->lineCount = *steMapCount;
+        sprintf(dst->buffer[2 + shteIdx], "%s,0x%llx,%lld,%lld",
+                shte->name, shte->shAddr, shte->offset, shte->lineCount);
+
+        shteIdx++;
+        sectionOffset += *steMapCount;
+    }
+
+    assert(shteIdx == dst->shtCount);
+
+    // debug log
+    if ((DEBUG_VERBOSE_SET & DEBUG_LINKER) != 0) {
+        for (int i = 0; i < dst->shtCount; ++i) {
+            printf("%s\n", dst->buffer[2 + i]);
+        }
+    }
+}
+
+void mergeSection(Elf **srcElfs, int srcNum, Elf *dstElf, SteMap *steMaps, int steMapCount) {
+    int lineWritten = 2 + dstElf->shtCount;
+    int steWritten = 0;
+    int secOffset = 0;
+    // scan sht which in dst
+    for (int dstShteIdx = 0; dstShteIdx < dstElf->shtCount; ++dstShteIdx) {
+        secOffset = 0;
+        ShtEntry *dstShte = &dstElf->sht[dstShteIdx];
+        for (int i = 0; i < srcNum; ++i) {
+            Elf *srcElf = srcElfs[i];
+
+            int srcShteIdx = -1;
+            for (int j = 0; j < srcElf->shtCount; ++j) {
+                if (strcmp(dstShte->name, srcElf->sht[j].name) == 0) {
+                    srcShteIdx = j;
+                    break;
+                }
+            }
+            if (srcShteIdx == -1) {
+                continue;
+            }
+            // if found, check its symtab
+            for (int j = 0; j < srcElf->stCount; ++j) {
+                StEntry *srcSte = &srcElf->st[j];
+                if (strcmp(dstShte->name, srcSte->inSecName) == 0) {
+                    for (int k = 0; k < steMapCount; ++k) {
+                        if (srcSte != steMaps[k].srcSte) {
+                            continue;
+                        }
+                        // now copy src section to dst section
+                        for (int l = 0; l < srcSte->lineCount; ++l) {
+                            // copy a line
+                            int dstBufferIdx = lineWritten + l;
+                            int srcBufferIdx = srcElf->sht[srcShteIdx].offset + srcSte->inSecOffset + l;
+
+                            assert(dstBufferIdx < MAX_ELF_FILE_ROW);
+                            assert(srcBufferIdx < MAX_ELF_FILE_ROW);
+
+                            strcpy(dstElf->buffer[dstBufferIdx], srcElf->buffer[srcBufferIdx]);
+                        }
+                        // copy src ste to dst ste
+                        StEntry *dstSte = &dstElf->st[steWritten];
+                        strcpy(dstSte->name, srcSte->name);
+                        dstSte->bind = srcSte->bind;
+                        dstSte->type = srcSte->type;
+                        strcpy(dstSte->inSecName, srcSte->inSecName);
+                        dstSte->inSecOffset = srcSte->inSecOffset + secOffset;
+                        dstSte->lineCount = srcSte->lineCount;
+
+                        steMaps[k].dstSte = dstSte;
+
+                        steWritten += 1;
+                        lineWritten += srcSte->lineCount;
+                        secOffset += srcSte->lineCount;
+                    }
+                }
+
+            }
+
+        }
+    }
+
+    // todo write symtab to buffer
+
 }
 
 void linkElf(Elf **srcElfs, int srcNum, Elf *dstElf) {
@@ -176,9 +311,19 @@ void linkElf(Elf **srcElfs, int srcNum, Elf *dstElf) {
         printf("%s\t%d\t%d\t%s\t%llu\t%llu\n", e->name, e->bind, e->type,
                e->inSecName, e->inSecOffset, e->lineCount);
     }
-
-    // compute and write dst EOF file header: include sht, line count, sht count
+    puts("=================");
+    // compute and write dst EOF file header: include line count, sht count, sht
     computeSectionHeader(dstElf, steMaps, &steMapCount);
+
+    dstElf->stCount = steMapCount;
+    dstElf->st = malloc(steMapCount * sizeof(StEntry));
+    // merge the left sections and relocate the entries in .text and .data
+    // merge the symbol content from ELF src into dst sections
+    mergeSection(srcElfs, srcNum, dstElf, steMaps, steMapCount);
+    puts("=================");
+    for (int i = 0; i < dstElf->lineCount; ++i) {
+        printf("%s\n", dstElf->buffer[i]);
+    }
 }
 
 

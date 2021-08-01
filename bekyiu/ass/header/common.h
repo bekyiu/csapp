@@ -18,7 +18,7 @@
 #define DEBUG_LOADER                 0x80
 #define DEBUG_PARSE_INST             0x100
 
-#define DEBUG_VERBOSE_SET            1
+#define DEBUG_VERBOSE_SET            DEBUG_INSTRUCTION_CYCLE | DEBUG_LINKER
 
 // do page walk
 #define DEBUG_ENABLE_PAGE_WALK      0
