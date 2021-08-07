@@ -173,6 +173,19 @@ int parseStType(char *type) {
     throw("unknown symbol table type: %s", type);
 }
 
+int parseRelType(char *type) {
+    if (strcmp(type, "R_X86_64_32") == 0) {
+        return R_X86_64_32;
+    }
+    if (strcmp(type, "R_X86_64_PC32") == 0) {
+        return R_X86_64_PC32;
+    }
+    if (strcmp(type, "R_X86_64_PLT32") == 0) {
+        return R_X86_64_PLT32;
+    }
+    throw("unknown rel type: %s", type);
+}
+
 // str: sum,STB_GLOBAL,STT_FUNC,.text,0,22
 void parseStEntry(char *str, StEntry *stEntry) {
     char **entry;
@@ -188,6 +201,21 @@ void parseStEntry(char *str, StEntry *stEntry) {
     freeTableEntry(entry, entryNum);
 }
 
+// 17,7,R_X86_64_PC32,1,-4
+void parseRelEntry(char *str, RelEntry *relEntry) {
+    char **entry;
+    int entryNum = parseTableEntry(str, &entry);
+    relEntry->rRow = str2uint(entry[0]);
+    relEntry->rCol = str2uint(entry[1]);
+    relEntry->type = parseRelType(entry[2]);
+    relEntry->stIdx = str2uint(entry[3]);
+
+    uint64_t rAddend = str2uint(entry[4]);
+    relEntry->rAddend = *((int64_t *) &rAddend);
+
+    freeTableEntry(entry, entryNum);
+}
+
 void parseElf(char *filename, Elf *elf) {
     int lineCount = readElf(filename, (uint64_t) (&elf->buffer));
 //    for (int i = 0; i < lineCount; ++i) {
@@ -199,24 +227,50 @@ void parseElf(char *filename, Elf *elf) {
     elf->sht = malloc(shtEntryNum * sizeof(ShtEntry));
     elf->shtCount = shtEntryNum;
 
+    ShtEntry *symShte = NULL;
+    ShtEntry *relTextShte = NULL;
+    ShtEntry *relDataShte = NULL;
     for (int i = 0; i < shtEntryNum; ++i) {
-        parseShtEntry(elf->buffer[2 + i], &elf->sht[i]);
-    }
+        ShtEntry *curShte = &elf->sht[i];
+        parseShtEntry(elf->buffer[2 + i], curShte);
 
-    // build symtab
-    for (int i = 0; i < shtEntryNum; ++i) {
-        ShtEntry shte = elf->sht[i];
-        char (*elfText)[MAX_ELF_FILE_COLUMN] = elf->buffer;
-        // find symtab header
-        if (strcmp(shte.name, ".symtab") == 0) {
-            elf->stCount = shte.lineCount;
-            elf->st = malloc(shte.lineCount * sizeof(StEntry));
-
-            for (int j = 0; j < shte.lineCount; ++j) {
-                parseStEntry(elfText[shte.offset + j], &elf->st[j]);
-            }
+        if (strcmp(curShte->name, ".symtab") == 0) {
+            symShte = curShte;
+        } else if (strcmp(curShte->name, ".rel.text") == 0) {
+            relTextShte = curShte;
+        } else if (strcmp(curShte->name, ".rel.data") == 0) {
+            relDataShte = curShte;
         }
     }
+    // parse symtab
+    elf->stCount = symShte->lineCount;
+    elf->st = malloc(elf->stCount * sizeof(StEntry));
+    for (int i = 0; i < elf->stCount; ++i) {
+        parseStEntry(elf->buffer[symShte->offset + i], &elf->st[i]);
+    }
+    // .rel.text
+    if (relTextShte != NULL) {
+        elf->relTextCount = relTextShte->lineCount;
+        elf->relText = malloc(elf->relTextCount * sizeof(RelEntry));
+        for (int i = 0; i < elf->relTextCount; ++i) {
+            parseRelEntry(elf->buffer[relTextShte->offset + i], &elf->relText[i]);
+        }
+    } else {
+        elf->relTextCount = 0;
+        elf->relText = NULL;
+    }
+    // .rel.data
+    if (relDataShte != NULL) {
+        elf->relDataCount = relDataShte->lineCount;
+        elf->relData = malloc(elf->relDataCount * sizeof(RelEntry));
+        for (int i = 0; i < elf->relDataCount; ++i) {
+            parseRelEntry(elf->buffer[relDataShte->offset + i], &elf->relData[i]);
+        }
+    } else {
+        elf->relDataCount = 0;
+        elf->relData = NULL;
+    }
+
 }
 
 void freeElf(Elf *elf) {
@@ -235,5 +289,10 @@ void logElf(Elf *elf) {
     for (int i = 0; i < elf->stCount; ++i) {
         StEntry e = elf->st[i];
         printf("%s\t%d\t%d\t%s\t%llu\t%llu\n", e.name, e.bind, e.type, e.inSecName, e.inSecOffset, e.lineCount);
+    }
+    printf("\n.rel.text:\n");
+    for (int i = 0; i < elf->relTextCount; ++i) {
+        RelEntry e = elf->relText[i];
+        printf("%lld\t%lld\t%d\t%d\t%lld\n", e.rRow, e.rCol, e.type, e.stIdx, e.rAddend);
     }
 }

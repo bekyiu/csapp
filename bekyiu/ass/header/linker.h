@@ -39,6 +39,23 @@ typedef struct {
     uint64_t lineCount;
 } StEntry;
 
+// ================== relocation =====================
+typedef enum {
+    R_X86_64_32,
+    R_X86_64_PC32,
+    R_X86_64_PLT32,
+} RelType;
+
+typedef struct {
+    // these two fields to locate the placeholder which to be relocate
+    uint64_t rRow;
+    uint64_t rCol;
+    // relocation type
+    RelType type;
+    // associated symtab entry
+    uint32_t stIdx;
+    int64_t rAddend;
+} RelEntry;
 // ================== section header table ======================
 typedef struct {
     // section name; sh_name
@@ -67,10 +84,20 @@ typedef struct {
     // symtab
     StEntry *st;
     uint64_t stCount;
+
+    RelEntry *relText;
+    uint64_t relTextCount;
+
+    RelEntry *relData;
+    uint64_t relDataCount;
 } Elf;
 
 void logElf(Elf *elf);
+
 void freeElf(Elf *elf);
+
 void parseElf(char *filename, Elf *elf);
+
 void linkElf(Elf **srcElfs, int srcNum, Elf *dstElf);
+
 #endif //CSAPP_LINKER_H
