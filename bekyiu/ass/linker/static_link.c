@@ -226,44 +226,86 @@ void computeSectionHeader(Elf *dst, SteMap *steMaps, int *steMapCount) {
 
     // debug log
     if ((DEBUG_VERBOSE_SET & DEBUG_LINKER) != 0) {
-        for (int i = 0; i < dst->shtCount; ++i) {
-            printf("%s\n", dst->buffer[2 + i]);
+//        for (int i = 0; i < dst->shtCount; ++i) {
+//            printf("%s\n", dst->buffer[2 + i]);
+//        }
+    }
+}
+
+int findShteIdx(Elf *srcElf, char *name) {
+    int srcShteIdx = -1;
+    for (int j = 0; j < srcElf->shtCount; ++j) {
+        if (strcmp(name, srcElf->sht[j].name) == 0) {
+            srcShteIdx = j;
+            break;
         }
+    }
+    return srcShteIdx;
+}
+
+char *stBindStr(StBind bind) {
+    switch (bind) {
+        case STB_GLOBAL:
+            return "STB_GLOBAL";
+        case STB_LOCAL:
+            return "STB_LOCAL";
+        case STB_WEAK:
+            return "STB_WEAK";
+        default:
+        throw("incorrect symbol bind\n");
+    }
+}
+
+char *stTypeStr(StType type) {
+    switch (type) {
+        case STT_NOTYPE:
+            return "STT_NOTYPE";
+        case STT_OBJECT:
+            return "STT_OBJECT";
+        case STT_FUNC:
+            return "STT_FUNC";
+        default:
+        throw("incorrect symbol type\n");
     }
 }
 
 void mergeSection(Elf **srcElfs, int srcNum, Elf *dstElf, SteMap *steMaps, int steMapCount) {
+    // index to start write to dst buffer
     int lineWritten = 2 + dstElf->shtCount;
+    // index to start write to dst symtab
     int steWritten = 0;
+    // offset in hole section, help to merge same type sections into one dst section
     int secOffset = 0;
-    // scan sht which in dst
+    // 1. scan sht which in dst
     for (int dstShteIdx = 0; dstShteIdx < dstElf->shtCount; ++dstShteIdx) {
+        // section type changed, so secOffset need to reset
         secOffset = 0;
+        // for example: this dstShte is .text
         ShtEntry *dstShte = &dstElf->sht[dstShteIdx];
+        // 2. scan every elf file and merge their .text sections into dst file
         for (int i = 0; i < srcNum; ++i) {
             Elf *srcElf = srcElfs[i];
-
-            int srcShteIdx = -1;
-            for (int j = 0; j < srcElf->shtCount; ++j) {
-                if (strcmp(dstShte->name, srcElf->sht[j].name) == 0) {
-                    srcShteIdx = j;
-                    break;
-                }
-            }
+            // 3. we need to copy src buffer to dst buffer
+            // so we need to known if the srcElf has .text section, and from sht we can get the answer
+            int srcShteIdx = findShteIdx(srcElf, dstShte->name);
             if (srcShteIdx == -1) {
                 continue;
             }
-            // if found, check its symtab
+            // 4. if found, check its symtab
+            // it's aim to get src buffer start index
             for (int j = 0; j < srcElf->stCount; ++j) {
                 StEntry *srcSte = &srcElf->st[j];
+                // 5. find the symbol witch in .text
                 if (strcmp(dstShte->name, srcSte->inSecName) == 0) {
+                    // we record the correct symbol (like process name conflict) in steMap
+                    // we only merge the correct symbol
+                    // so we scn the steMap to check it
                     for (int k = 0; k < steMapCount; ++k) {
                         if (srcSte != steMaps[k].srcSte) {
                             continue;
                         }
-                        // now copy src section to dst section
+                        // 6. now can copy src section to dst section line by line
                         for (int l = 0; l < srcSte->lineCount; ++l) {
-                            // copy a line
                             int dstBufferIdx = lineWritten + l;
                             int srcBufferIdx = srcElf->sht[srcShteIdx].offset + srcSte->inSecOffset + l;
 
@@ -272,13 +314,13 @@ void mergeSection(Elf **srcElfs, int srcNum, Elf *dstElf, SteMap *steMaps, int s
 
                             strcpy(dstElf->buffer[dstBufferIdx], srcElf->buffer[srcBufferIdx]);
                         }
-                        // copy src ste to dst ste
+                        // 7. now we can fill the dst symtab
                         StEntry *dstSte = &dstElf->st[steWritten];
                         strcpy(dstSte->name, srcSte->name);
                         dstSte->bind = srcSte->bind;
                         dstSte->type = srcSte->type;
                         strcpy(dstSte->inSecName, srcSte->inSecName);
-                        dstSte->inSecOffset = srcSte->inSecOffset + secOffset;
+                        dstSte->inSecOffset = secOffset;
                         dstSte->lineCount = srcSte->lineCount;
 
                         steMaps[k].dstSte = dstSte;
@@ -294,7 +336,15 @@ void mergeSection(Elf **srcElfs, int srcNum, Elf *dstElf, SteMap *steMaps, int s
         }
     }
 
-    // todo write symtab to buffer
+    // write symtab to buffer
+    for (int i = 0; i < dstElf->stCount; ++i) {
+        StEntry *ste = &dstElf->st[i];
+        sprintf(dstElf->buffer[lineWritten], "%s,%s,%s,%s,%lld,%lld",
+                ste->name, stBindStr(ste->bind), stTypeStr(ste->type),
+                ste->inSecName, ste->inSecOffset, ste->lineCount);
+        lineWritten++;
+    }
+    assert(lineWritten == dstElf->lineCount);
 
 }
 
@@ -305,13 +355,13 @@ void linkElf(Elf **srcElfs, int srcNum, Elf *dstElf) {
     SteMap steMaps[MAX_SYMBOL_MAP_LENGTH];
     // update the steMaps - symbol processing
     symbolProcessing(srcElfs, srcNum, dstElf, steMaps, &steMapCount);
-    puts("=================");
-    for (int i = 0; i < steMapCount; ++i) {
-        StEntry *e = steMaps[i].srcSte;
-        printf("%s\t%d\t%d\t%s\t%llu\t%llu\n", e->name, e->bind, e->type,
-               e->inSecName, e->inSecOffset, e->lineCount);
-    }
-    puts("=================");
+    blog("=================");
+//    for (int i = 0; i < steMapCount; ++i) {
+//        StEntry *e = steMaps[i].srcSte;
+//        printf("%s\t%d\t%d\t%s\t%llu\t%llu\n", e->name, e->bind, e->type,
+//               e->inSecName, e->inSecOffset, e->lineCount);
+//    }
+    blog("=================");
     // compute and write dst EOF file header: include line count, sht count, sht
     computeSectionHeader(dstElf, steMaps, &steMapCount);
 
@@ -320,7 +370,7 @@ void linkElf(Elf **srcElfs, int srcNum, Elf *dstElf) {
     // merge the left sections and relocate the entries in .text and .data
     // merge the symbol content from ELF src into dst sections
     mergeSection(srcElfs, srcNum, dstElf, steMaps, steMapCount);
-    puts("=================");
+    blog("=================");
     for (int i = 0; i < dstElf->lineCount; ++i) {
         printf("%s\n", dstElf->buffer[i]);
     }

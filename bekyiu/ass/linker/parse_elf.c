@@ -190,9 +190,9 @@ void parseStEntry(char *str, StEntry *stEntry) {
 
 void parseElf(char *filename, Elf *elf) {
     int lineCount = readElf(filename, (uint64_t) (&elf->buffer));
-    for (int i = 0; i < lineCount; ++i) {
-        printf("[%d]\t%s\n", i, elf->buffer[i]);
-    }
+//    for (int i = 0; i < lineCount; ++i) {
+//        printf("[%d]\t%s\n", i, elf->buffer[i]);
+//    }
 
     // build section header table
     int shtEntryNum = (int) str2uint(elf->buffer[1]);
