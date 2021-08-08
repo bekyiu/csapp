@@ -348,6 +348,150 @@ void mergeSection(Elf **srcElfs, int srcNum, Elf *dstElf, SteMap *steMaps, int s
 
 }
 
+// relocating handlers
+void r_x86_64_32_handler(Elf *dstElf, ShtEntry *shte,
+                         int rowReferencing, int colReferencing, int addend,
+                         StEntry *eofReferencedSymbol) {
+    printf("row = %d, col = %d, symbol referenced = %s\n",
+           rowReferencing, colReferencing, eofReferencedSymbol->name
+    );
+}
+
+void r_x86_64_pc32_handler(Elf *dstElf, ShtEntry *shte,
+                           int rowReferencing, int colReferencing, int addend,
+                           StEntry *eofReferencedSymbol) {
+    printf("row = %d, col = %d, symbol referenced = %s\n",
+           rowReferencing, colReferencing, eofReferencedSymbol->name
+    );
+}
+
+void r_x86_64_plt32_handler(Elf *dstElf, ShtEntry *shte,
+                            int rowReferencing, int colReferencing, int addend,
+                            StEntry *eofReferencedSymbol) {
+    printf("row = %d, col = %d, symbol referenced = %s\n",
+           rowReferencing, colReferencing, eofReferencedSymbol->name
+    );
+}
+
+typedef void (*RelHandler)(Elf *dstElf, ShtEntry *shte,
+                           int rowReferencing, int colReferencing, int addend,
+                           StEntry *eofReferencedSymbol);
+
+RelHandler relHandlers[3] = {
+        &r_x86_64_32_handler,       // 0
+        &r_x86_64_pc32_handler,     // 1
+        // linux commit b21ebf2: x86: Treat R_X86_64_PLT32 as R_X86_64_PC32
+        &r_x86_64_pc32_handler,     // 2
+};
+
+
+// find the symbol which is referencing re from the elf
+StEntry *findElfReferencingSymbol(RelEntry *re, Elf *elf, char *sectionName) {
+
+    for (int k = 0; k < elf->stCount; ++k) {
+        StEntry *ste = &elf->st[k];
+        if (strcmp(ste->inSecName, sectionName) != 0) {
+            continue;
+        }
+        int symTextStart = ste->inSecOffset;
+        int symTextEnd = ste->inSecOffset + ste->lineCount;
+        // if true, we find the referencing symbol in elf
+        if (re->rRow >= symTextStart && re->rRow <= symTextEnd) {
+            return ste;
+        }
+    }
+    throw("can not find referencing symbol in elf");
+}
+
+// find the referencing symbol mapping in eof(dst elf)
+StEntry *findEofReferencingSymbol(StEntry *elfReferencingSymbol, SteMap *steMaps, int steMapCount) {
+    for (int l = 0; l < steMapCount; ++l) {
+        SteMap *steMap = &steMaps[l];
+        if (elfReferencingSymbol == steMap->srcSte) {
+            return steMap->dstSte;
+        }
+    }
+    throw("can not find referencing symbol in eof");
+}
+
+// find the referenced symbol in eof
+StEntry *findEofReferencedSymbol(Elf *elf, RelEntry *re, SteMap *steMaps, int steMapCount) {
+    for (int m = 0; m < steMapCount; ++m) {
+        StEntry *dstSte = steMaps[m].dstSte;
+        if (strcmp(elf->st[re->stIdx].name, dstSte->name) == 0 && dstSte->bind == STB_GLOBAL) {
+            return dstSte;
+        }
+    }
+    throw("can not find referenced symbol in eof");
+}
+
+// recalculate rRow and replace the placeholder
+void recalculateAndReplace(Elf *elf, char *sectionName, ShtEntry *dstShte, Elf *dstElf, SteMap *steMaps,
+                           int steMapCount) {
+    uint64_t relCount = 0;
+    RelEntry *relTable = NULL;
+
+    if (strcmp(sectionName, ".text") == 0) {
+        relCount = elf->relTextCount;
+        relTable = elf->relText;
+    } else if (strcmp(sectionName, ".data") == 0) {
+        relCount = elf->relDataCount;
+        relTable = elf->relData;
+    } else {
+        throw("error section name: %s, expected .text or .data", sectionName);
+    }
+
+    // scan every rel entry
+    for (int j = 0; j < relCount; ++j) {
+        RelEntry *re = &relTable[j];
+
+        // 1: find the symbol which is referencing re
+        StEntry *elfReferencingSymbol = findElfReferencingSymbol(re, elf, sectionName);
+        // 2: now we need to find the referencing symbol mapping in eof(dst elf) to help us calculate the new rRow
+        StEntry *eofReferencingSymbol = findEofReferencingSymbol(elfReferencingSymbol, steMaps, steMapCount);
+        // 3: now we need to find the referenced symbol in eof
+        StEntry *eofReferencedSymbol = findEofReferencedSymbol(elf, re, steMaps, steMapCount);
+
+        // 4: do replace
+        (relHandlers[(int) re->type])(
+                dstElf,
+                dstShte,
+                re->rRow - elfReferencingSymbol->inSecOffset + eofReferencingSymbol->inSecOffset,
+                re->rCol,
+                re->rAddend,
+                eofReferencedSymbol
+        );
+
+    }
+}
+
+void relocationProcessing(Elf **srcElfs, int srcNum, Elf *dstElf, SteMap *steMaps, int steMapCount) {
+    ShtEntry *dstShteText = NULL;
+    ShtEntry *dstShteData = NULL;
+
+    for (int i = 0; i < dstElf->shtCount; ++i) {
+        if (strcmp(dstElf->sht[i].name, ".text") == 0) {
+            dstShteText = &(dstElf->sht[i]);
+        } else if (strcmp(dstElf->sht[i].name, ".data") == 0) {
+            dstShteData = &(dstElf->sht[i]);
+        }
+    }
+
+
+    // we can find the relocation place from the rel entry in every elf files
+    // but after merge sections, the rRow may have been changed
+    // so we have to recalculate it and then replace the placeholder
+    for (int i = 0; i < srcNum; ++i) {
+        Elf *elf = srcElfs[i];
+        // process .rel.text
+        recalculateAndReplace(elf, ".text", dstShteText, dstElf, steMaps, steMapCount);
+        // process .rel.data
+        recalculateAndReplace(elf, ".data", dstShteData, dstElf, steMaps, steMapCount);
+    }
+
+}
+
+
 void linkElf(Elf **srcElfs, int srcNum, Elf *dstElf) {
     memset(dstElf, 0, sizeof(Elf));
 
@@ -374,6 +518,8 @@ void linkElf(Elf **srcElfs, int srcNum, Elf *dstElf) {
     for (int i = 0; i < dstElf->lineCount; ++i) {
         printf("%s\n", dstElf->buffer[i]);
     }
+    // relocating: update the relocation entries from ELF files into EOF buffer
+    relocationProcessing(srcElfs, srcNum, dstElf, steMaps, steMapCount);
 }
 
 
