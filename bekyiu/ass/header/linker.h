@@ -72,6 +72,7 @@ typedef struct {
 
 #define MAX_ELF_FILE_ROW (64)    // max 64 effective lines
 #define MAX_ELF_FILE_COLUMN (128)    // max 128 chars per line
+#define TEXT_ADDR_BASE 0x00400000
 
 typedef struct {
     char buffer[MAX_ELF_FILE_ROW][MAX_ELF_FILE_COLUMN];

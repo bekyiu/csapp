@@ -9,6 +9,7 @@
 #include "../header/linker.h"
 #include "../header/common.h"
 #include "../header/cpu.h"
+#include "../header/instruction.h"
 
 #define MAX_SYMBOL_MAP_LENGTH 64
 #define MAX_SECTION_BUFFER_LENGTH 64
@@ -132,13 +133,13 @@ void symbolProcessing(Elf **srcElfs, int srcNum, Elf *dstElf, SteMap *steMaps, i
     }
 }
 
-void computeSectionHeader(Elf *dst, SteMap *steMaps, int *steMapCount) {
+void computeSectionHeader(Elf *dst, SteMap *steMaps, int steMapCount) {
     // compute section line count
     uint64_t textLineCount = 0;
     uint64_t dataLineCount = 0;
     uint64_t rodataLineCount = 0;
 
-    for (int i = 0; i < *steMapCount; ++i) {
+    for (int i = 0; i < steMapCount; ++i) {
         StEntry *ste = steMaps[i].srcSte;
         if (strcmp(ste->inSecName, ".text") == 0) {
             textLineCount += ste->lineCount;
@@ -151,13 +152,13 @@ void computeSectionHeader(Elf *dst, SteMap *steMaps, int *steMapCount) {
 
     // plus one means add .symtab
     dst->shtCount = (textLineCount != 0) + (dataLineCount != 0) + (rodataLineCount != 0) + 1;
-    dst->lineCount = 1 + 1 + dst->shtCount + textLineCount + dataLineCount + rodataLineCount + *steMapCount;
-    dst->stCount = *steMapCount;
+    dst->lineCount = 1 + 1 + dst->shtCount + textLineCount + dataLineCount + rodataLineCount + steMapCount;
+    dst->stCount = steMapCount;
     sprintf(dst->buffer[0], "%lld", dst->lineCount);
     sprintf(dst->buffer[1], "%lld", dst->shtCount);
 
     // compute the run-time address of the sections: compact in memory
-    uint64_t textRuntimeAddr = 0x00400000;
+    uint64_t textRuntimeAddr = TEXT_ADDR_BASE;
     uint64_t rodataRuntimeAddr = textRuntimeAddr + textLineCount * MAX_INSTRUCTION_CHAR * sizeof(char);
     uint64_t dataRuntimeAddr = rodataRuntimeAddr + rodataLineCount * sizeof(uint64_t);
     uint64_t symtabRuntimeAddr = 0; // For EOF, .symtab is not loaded into run-time memory but still on disk
@@ -209,17 +210,17 @@ void computeSectionHeader(Elf *dst, SteMap *steMaps, int *steMapCount) {
         sectionOffset += dataLineCount;
     }
     // .symtab
-    if (*steMapCount > 0) {
+    if (steMapCount > 0) {
         shte = &(dst->sht[shteIdx]);
         strcpy(shte->name, ".symtab");
         shte->shAddr = symtabRuntimeAddr;
         shte->offset = sectionOffset;
-        shte->lineCount = *steMapCount;
+        shte->lineCount = steMapCount;
         sprintf(dst->buffer[2 + shteIdx], "%s,0x%llx,%lld,%lld",
                 shte->name, shte->shAddr, shte->offset, shte->lineCount);
 
         shteIdx++;
-        sectionOffset += *steMapCount;
+        sectionOffset += steMapCount;
     }
 
     assert(shteIdx == dst->shtCount);
@@ -348,29 +349,71 @@ void mergeSection(Elf **srcElfs, int srcNum, Elf *dstElf, SteMap *steMaps, int s
 
 }
 
+void replacePlaceholder(char *placeholder, uint64_t addr) {
+    char temp[20];
+    sprintf(temp, "0x%016llx", addr);
+    for (int i = 0; i < 18; ++i) {
+        placeholder[i] = temp[i];
+    }
+}
+
+uint64_t calcSymbolRuntimeAddr(Elf *dstElf, StEntry *eofReferencedSymbol) {
+
+    uint64_t textBase = TEXT_ADDR_BASE;
+    uint64_t rodataBase = TEXT_ADDR_BASE;
+    uint64_t dataBase = TEXT_ADDR_BASE;
+    size_t instSize = sizeof(Inst);
+    size_t dataSize = sizeof(uint64_t);
+
+    for (int i = 0; i < dstElf->shtCount; ++i) {
+        ShtEntry shte = dstElf->sht[i];
+        if (strcmp(".text", shte.name) == 0) {
+            rodataBase += shte.lineCount * instSize;
+            dataBase = rodataBase;
+        } else if (strcmp(".rodata", shte.name) == 0) {
+            dataBase += shte.lineCount * dataSize;
+        }
+    }
+
+    if (strcmp(eofReferencedSymbol->inSecName, ".text") == 0) {
+        return textBase + eofReferencedSymbol->inSecOffset * instSize;
+    }
+    if (strcmp(eofReferencedSymbol->inSecName, ".rodata") == 0) {
+
+        return rodataBase + eofReferencedSymbol->inSecOffset * dataSize;
+    }
+    if (strcmp(eofReferencedSymbol->inSecName, ".data") == 0) {
+        return dataBase + eofReferencedSymbol->inSecOffset * dataSize;
+    }
+    throw("calcSymbolRuntimeAddr error, symbol inSecName: %s", eofReferencedSymbol->inSecName);
+}
+
 // relocating handlers
 void r_x86_64_32_handler(Elf *dstElf, ShtEntry *shte,
                          int rowReferencing, int colReferencing, int addend,
                          StEntry *eofReferencedSymbol) {
-    printf("row = %d, col = %d, symbol referenced = %s\n",
-           rowReferencing, colReferencing, eofReferencedSymbol->name
-    );
+    char *placeholder = &dstElf->buffer[shte->offset + rowReferencing][colReferencing];
+    uint64_t addr = calcSymbolRuntimeAddr(dstElf, eofReferencedSymbol);
+    replacePlaceholder(placeholder, addr);
 }
 
 void r_x86_64_pc32_handler(Elf *dstElf, ShtEntry *shte,
                            int rowReferencing, int colReferencing, int addend,
                            StEntry *eofReferencedSymbol) {
-    printf("row = %d, col = %d, symbol referenced = %s\n",
-           rowReferencing, colReferencing, eofReferencedSymbol->name
-    );
+
+    assert(strcmp(shte->name, ".text") == 0);
+
+    char *placeholder = &dstElf->buffer[shte->offset + rowReferencing][colReferencing];
+    uint64_t addr = calcSymbolRuntimeAddr(dstElf, eofReferencedSymbol);
+    uint64_t rip = TEXT_ADDR_BASE + (rowReferencing + 1) * sizeof(Inst);
+    replacePlaceholder(placeholder, addr - rip);
 }
 
 void r_x86_64_plt32_handler(Elf *dstElf, ShtEntry *shte,
                             int rowReferencing, int colReferencing, int addend,
                             StEntry *eofReferencedSymbol) {
-    printf("row = %d, col = %d, symbol referenced = %s\n",
-           rowReferencing, colReferencing, eofReferencedSymbol->name
-    );
+    // linux commit b21ebf2: x86: Treat R_X86_64_PLT32 as R_X86_64_PC32
+    r_x86_64_pc32_handler(dstElf, shte, rowReferencing, colReferencing, addend, eofReferencedSymbol);
 }
 
 typedef void (*RelHandler)(Elf *dstElf, ShtEntry *shte,
@@ -380,8 +423,7 @@ typedef void (*RelHandler)(Elf *dstElf, ShtEntry *shte,
 RelHandler relHandlers[3] = {
         &r_x86_64_32_handler,       // 0
         &r_x86_64_pc32_handler,     // 1
-        // linux commit b21ebf2: x86: Treat R_X86_64_PLT32 as R_X86_64_PC32
-        &r_x86_64_pc32_handler,     // 2
+        &r_x86_64_plt32_handler,    // 2
 };
 
 
@@ -445,11 +487,11 @@ void recalculateAndReplace(Elf *elf, char *sectionName, ShtEntry *dstShte, Elf *
     for (int j = 0; j < relCount; ++j) {
         RelEntry *re = &relTable[j];
 
-        // 1: find the symbol which is referencing re
+        // 1: find the symbol which is referencing re: elf main
         StEntry *elfReferencingSymbol = findElfReferencingSymbol(re, elf, sectionName);
-        // 2: now we need to find the referencing symbol mapping in eof(dst elf) to help us calculate the new rRow
+        // 2: now we need to find the referencing symbol mapping in eof(dst elf) to help us calculate the new rRow: eof main
         StEntry *eofReferencingSymbol = findEofReferencingSymbol(elfReferencingSymbol, steMaps, steMapCount);
-        // 3: now we need to find the referenced symbol in eof
+        // 3: now we need to find the referenced symbol in eof: eof sum
         StEntry *eofReferencedSymbol = findEofReferencedSymbol(elf, re, steMaps, steMapCount);
 
         // 4: do replace
@@ -499,27 +541,31 @@ void linkElf(Elf **srcElfs, int srcNum, Elf *dstElf) {
     SteMap steMaps[MAX_SYMBOL_MAP_LENGTH];
     // update the steMaps - symbol processing
     symbolProcessing(srcElfs, srcNum, dstElf, steMaps, &steMapCount);
-    blog("=================");
+    blog("======== after symbol processing =========");
 //    for (int i = 0; i < steMapCount; ++i) {
 //        StEntry *e = steMaps[i].srcSte;
 //        printf("%s\t%d\t%d\t%s\t%llu\t%llu\n", e->name, e->bind, e->type,
 //               e->inSecName, e->inSecOffset, e->lineCount);
 //    }
-    blog("=================");
     // compute and write dst EOF file header: include line count, sht count, sht
-    computeSectionHeader(dstElf, steMaps, &steMapCount);
+    computeSectionHeader(dstElf, steMaps, steMapCount);
+    blog("========= after write line count, sht count, sht ========");
 
     dstElf->stCount = steMapCount;
     dstElf->st = malloc(steMapCount * sizeof(StEntry));
     // merge the left sections and relocate the entries in .text and .data
     // merge the symbol content from ELF src into dst sections
     mergeSection(srcElfs, srcNum, dstElf, steMaps, steMapCount);
-    blog("=================");
+    blog("========= after section merging ========");
     for (int i = 0; i < dstElf->lineCount; ++i) {
         printf("%s\n", dstElf->buffer[i]);
     }
     // relocating: update the relocation entries from ELF files into EOF buffer
     relocationProcessing(srcElfs, srcNum, dstElf, steMaps, steMapCount);
+    blog("========= after relocation ========");
+    for (int i = 0; i < dstElf->lineCount; ++i) {
+        printf("%s\n", dstElf->buffer[i]);
+    }
 }
 
 
