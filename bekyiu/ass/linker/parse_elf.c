@@ -218,6 +218,7 @@ void parseRelEntry(char *str, RelEntry *relEntry) {
 
 void parseElf(char *filename, Elf *elf) {
     int lineCount = readElf(filename, (uint64_t) (&elf->buffer));
+    elf->lineCount = lineCount;
 //    for (int i = 0; i < lineCount; ++i) {
 //        printf("[%d]\t%s\n", i, elf->buffer[i]);
 //    }
@@ -279,6 +280,7 @@ void freeElf(Elf *elf) {
 }
 
 void logElf(Elf *elf) {
+    printf("\nline count: %lld\n", elf->lineCount);
     printf("\nsection header table:\n");
     for (int i = 0; i < elf->shtCount; ++i) {
         ShtEntry e = elf->sht[i];

@@ -35,4 +35,7 @@ void write64Dram(uint64_t pAddr, uint64_t data, Core *cr);
 void writeInstDram(uint64_t pAddr, const char *instStr, Core *cr);
 void readInstDram(uint64_t pAddr, char *buf, Core *cr);
 
+void readCacheLine(uint64_t pAddr, uint8_t *block);
+void writeCacheLine(uint64_t pAddr, uint8_t *block);
+
 #endif //CSAPP_MEMORY_H

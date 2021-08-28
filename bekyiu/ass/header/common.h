@@ -24,7 +24,7 @@
 #define DEBUG_ENABLE_PAGE_WALK      0
 
 // use sram cache for memory access
-#define DEBUG_ENABLE_SRAM_CACHE     0
+#define DEBUG_ENABLE_SRAM_CACHE     1
 
 // printf wrapper
 uint64_t slog(uint64_t openSet, const char *format, ...);
