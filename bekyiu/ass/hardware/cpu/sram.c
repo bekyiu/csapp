@@ -8,7 +8,7 @@
 #include <stdint.h>
 #include <stdio.h>
 
-#define NUM_CACHE_LINE_PER_SET 8
+#define NUM_CACHE_LINE_PER_SET 1
 
 typedef enum {
     CACHE_LINE_INVALID,
@@ -65,12 +65,14 @@ uint8_t cacheRead(uint64_t pAddrValue) {
         if (line->state != CACHE_LINE_INVALID && line->tag == pAddr.ct) {
             // cache hit
             // update LRU
+            blog("read hit");
             line->time = 0;
             return line->block[pAddr.co];
         }
     }
 
     // cache miss
+    blog("read miss");
     // if found free cache line, load data from dram to it
     if (invalid != NULL) {
         readCacheLine(pAddrValue, invalid->block);
@@ -82,6 +84,7 @@ uint8_t cacheRead(uint64_t pAddrValue) {
 
     // if no free cache line, replace the victim
     if (victim != NULL) {
+        blog("read replace victim");
         if (victim->state == CACHE_LINE_DIRTY) {
             // todo write back addr is correct ?
             // write back the dirt line to dram
@@ -130,6 +133,7 @@ void cacheWrite(uint64_t pAddrValue, uint8_t data) {
         if (line->state != CACHE_LINE_INVALID && line->tag == pAddr.ct) {
             // cache hit
             // update LRU
+            blog("write hit");
             line->time = 0;
             line->block[pAddr.co] = data;
             line->state = CACHE_LINE_DIRTY;
@@ -137,6 +141,7 @@ void cacheWrite(uint64_t pAddrValue, uint8_t data) {
         }
     }
 
+    blog("write miss");
     // cache miss
     // if found free cache line, load data from dram to it
     if (invalid != NULL) {
@@ -150,6 +155,7 @@ void cacheWrite(uint64_t pAddrValue, uint8_t data) {
 
     // if no free cache line, replace the victim
     if (victim != NULL) {
+        blog("write replace victim");
         if (victim->state == CACHE_LINE_DIRTY) {
             // write back the dirt line to dram
             writeCacheLine(pAddrValue, victim->block);

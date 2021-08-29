@@ -7,7 +7,7 @@
 #include "../ass/header/linker.h"
 
 
-int main() {
+int mainLink() {
     Elf elf[2];
     // './' 是指cmake-build-debug这个目录
     parseElf("../bekyiu/file/rel_sum.elf.txt", &elf[0]);
