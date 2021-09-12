@@ -199,6 +199,19 @@ typedef struct Flags {
     };
 } Flags;
 
+// control registers
+typedef struct Crs {
+    uint64_t cr0;
+    uint64_t cr1;
+    uint64_t cr2;
+    // cr3 to find the pgd, should be a 40-bit ppn for pgd in dram
+    // but we put the page table in simulator's heap (not in our mock dram)
+    // so the cr3 save a 48-bit virtual addr
+    uint64_t cr3;
+} Crs;
+
+Crs crs;
+
 /*======================================*/
 /*      cpu core                        */
 /*======================================*/
