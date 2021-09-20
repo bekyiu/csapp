@@ -24,6 +24,8 @@
 // only used for user process
 uint8_t pm[PHYSICAL_MEMORY_SPACE];
 
+#define PAGE_TABLE_ENTRY_NUM 512
+
 
 // page table entry struct
 // 8 bytes = 64 bits
