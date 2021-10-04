@@ -25,7 +25,8 @@
 uint8_t pm[PHYSICAL_MEMORY_SPACE];
 
 #define PAGE_TABLE_ENTRY_NUM 512
-
+// 65536 / 4kb
+#define MAX_NUM_PHYSICAL_PAGE 16
 
 // page table entry struct
 // 8 bytes = 64 bits
@@ -90,6 +91,27 @@ typedef union {
         uint64_t swapId: 63;   // disk address
     };
 } Pte4;   // PT
+
+// physical page descriptor
+typedef struct {
+    int allocated;
+    int dirty;
+    int time;
+
+    Pte4 *pte4
+} Ppd;
+
+/*
+ * 物理内存作为磁盘的缓存，如果当前的进程[t]发生了缺页，内核决定牺牲进程[j]物理页[i]，
+ * 那么就要将物理页[i]的数据写入磁盘，然后才将进程[t]的数据写入物理页[i]。
+ * 同时，内核需要修改进程[j]的页表，使得[j]仍能通过页表索引到磁盘上的数据。
+ *
+ * 也就是说，我们需要通过物理页的页号（Page Number）[i]查找到进程[j]的页表项，
+ * 这个过程就是页表的反向映射（Reversed Mapping），是从物理地址到虚拟地址的映射。
+ *
+ * ppn map to pte
+ */
+Ppd reversePageMap[MAX_NUM_PHYSICAL_PAGE];
 
 /*======================================*/
 /*      memory R/W                      */

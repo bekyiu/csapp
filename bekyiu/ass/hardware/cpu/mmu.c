@@ -10,6 +10,8 @@
 #include "../../header/address.h"
 #include "../../header/common.h"
 
+void pageFaultHandler(Pte4 *pte, Addr addr);
+
 // map vaddr to paddr
 uint64_t pageWalk(uint64_t vAddrValue) {
     Addr vAddr = {
@@ -32,7 +34,8 @@ uint64_t pageWalk(uint64_t vAddrValue) {
                     };
                     return pAddr._addrValue;
                 } else {
-                    throw("page fault!");
+                    // process page fault
+                    pageFaultHandler(&pt[vAddr.vpn4], vAddr);
                 }
             } else {
                 throw("pmd page fault!");
@@ -42,8 +45,6 @@ uint64_t pageWalk(uint64_t vAddrValue) {
             throw("pud page fault!");
         }
     } else {
-        // todo page fault
-
         // 4kb
         int pteSize = PAGE_TABLE_ENTRY_NUM * sizeof(Pte123);
         Pte123 *pte = malloc(pteSize);
@@ -53,6 +54,32 @@ uint64_t pageWalk(uint64_t vAddrValue) {
         throw("pgd page fault!");
     }
 
+}
+
+void pageFaultHandler(Pte4 *pte, Addr addr) {
+    // 1. try to find a free physical page from dram
+    int ppn = -1;
+    for (int i = 0; i < MAX_NUM_PHYSICAL_PAGE; ++i) {
+        Ppd *ppd = &reversePageMap[i];
+        if (ppd->pte4->present == 0) {
+            printf("PageFault: use free ppn %d\n", i);
+            ppn = i;
+
+            ppd->allocated = 1;
+            ppd->dirty = 0;
+            ppd->time = 0;
+            ppd->pte4 = pte;
+
+            pte->present = 1;
+            pte->ppn = ppn;
+            pte->dirty = 0;
+            return;
+        }
+    }
+    // 2. if no free physical page, select a clean page and overwrite
+    // in this case, there is no dram - disk transaction
+
+    // 3. if no free nor clean physical page, select a victim swap out
 }
 
 
